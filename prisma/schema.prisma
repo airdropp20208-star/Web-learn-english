@@ -1,0 +1,178 @@
+// Prisma schema for Web Learn English app
+// NextAuth v4 + app data models
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// =====================
+// NextAuth models
+// =====================
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  accounts      Account[]
+  sessions      Session[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // App relations
+  texts          Text[]
+  memoryItems    MemoryItem[]
+  vocabItems     VocabItem[]
+  quizQuestions  QuizQuestion[]
+  userProgress   UserProgress?
+  shadowSessions ShadowSession[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// =====================
+// App models
+// =====================
+
+model Text {
+  id         String   @id @default(cuid())
+  userId     String
+  title      String
+  content    String
+  cefrLevel  String   @default("B1")
+  summary    String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  memoryItems   MemoryItem[]
+  vocabItems    VocabItem[]
+  quizQuestions QuizQuestion[]
+  shadowSessions ShadowSession[]
+
+  @@index([userId, createdAt])
+}
+
+model MemoryItem {
+  id              String   @id @default(cuid())
+  userId          String
+  sourceTextId    String
+  itemType        String   @default("word") // "word" | "grammar" | "gist"
+  refText         String
+  cefrLevel       String   @default("B1")
+  halfLifeDays    Float    @default(1.0)
+  lastReviewedAt  DateTime @default(now())
+  // SQLite does not support list primitives → store as JSON string
+  correctHistory  String   @default("[]") // JSON boolean[]
+  latencyHistory  String   @default("[]") // JSON number[]
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sourceText Text       @relation(fields: [sourceTextId], references: [id], onDelete: Cascade)
+  vocabItem  VocabItem?
+
+  @@index([userId, lastReviewedAt])
+}
+
+model VocabItem {
+  id              String   @id @default(cuid())
+  userId          String
+  word            String
+  definition      String
+  exampleSentence String
+  contextSentence String
+  cefrLevel       String   @default("B1")
+  sourceTextId    String
+  memoryItemId    String   @unique
+  createdAt       DateTime @default(now())
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sourceText Text       @relation(fields: [sourceTextId], references: [id], onDelete: Cascade)
+  memoryItem MemoryItem @relation(fields: [memoryItemId], references: [id], onDelete: Cascade)
+
+  @@index([userId, word])
+}
+
+model QuizQuestion {
+  id                  String   @id @default(cuid())
+  userId              String
+  textId              String
+  type                String   // "mcq" | "cloze" | "recall"
+  question            String
+  options             String   @default("[]") // JSON string[]
+  correctAnswer       String
+  relatedMemoryItemId String?
+  createdAt           DateTime @default(now())
+
+  user       User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sourceText Text @relation(fields: [textId], references: [id], onDelete: Cascade)
+
+  @@index([userId, textId])
+}
+
+model UserProgress {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  currentTier     String   @default("A2")
+  tierMasteryScore Float   @default(0.0)
+  streakDays      Int      @default(0)
+  lastActiveDate  DateTime @default(now())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model ShadowSession {
+  id              String   @id @default(cuid())
+  userId          String
+  textId          String
+  audioUrl        String   @default("") // for Web Speech API MVP, not used
+  userRecordingUrl String  @default("") // blob URL, ephemeral
+  completedAt     DateTime @default(now())
+
+  user       User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sourceText Text @relation(fields: [textId], references: [id], onDelete: Cascade)
+
+  @@index([userId, completedAt])
+}
