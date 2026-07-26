@@ -56,3 +56,11 @@ upload/
 # downloaded artifacts
 download/
 !download/README.md
+
+# sandbox-internal (not part of user project)
+skills/
+Caddyfile
+mini-services/
+examples/
+tests/
+.zscripts/
