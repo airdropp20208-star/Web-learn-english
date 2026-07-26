@@ -1,139 +1,227 @@
-// Mock AI client — returns canned responses for MVP
-// Swap with real provider (z-ai-web-dev-sdk / Claude / OpenAI) later
+// AI client — Gemini 2.5 Flash with multi-key rotation
+// Reads GEMINI_API_KEYS env var (comma-separated) for rotation on rate limit
+// Hard fails when no keys configured → API routes return 503
 
+import { GoogleGenAI, Type } from "@google/genai";
 import type { AnalyzeResponse, QuizResponse, CEFRLevel } from "./types";
 
-// Mock sample texts and words for testing
-const MOCK_TEXTS = [
-  {
-    title: "The Coffee Shop Habit",
-    content:
-      "Every morning, Sarah walks to the small coffee shop near her apartment. She orders a latte and reads the newspaper for thirty minutes before going to work. The barista knows her name and her favorite drink. This routine has become an important part of her day, giving her a moment of calm before the busy hours ahead.",
-    cefrLevel: "B1" as CEFRLevel,
-    words: [
-      {
-        word: "routine",
-        definition: "a regular way of doing things in a particular order",
-        example: "Her morning routine includes exercise and breakfast.",
-        cefrLevel: "B2" as CEFRLevel,
-      },
-      {
-        word: "barista",
-        definition: "a person who serves in a coffee shop",
-        example: "The barista made a beautiful latte art on my coffee.",
-        cefrLevel: "B2" as CEFRLevel,
-      },
-      {
-        word: "apartment",
-        definition: "a set of rooms for living in, especially on one floor",
-        example: "They moved into a new apartment last month.",
-        cefrLevel: "A2" as CEFRLevel,
-      },
-      {
-        word: "important",
-        definition: "having great significance or value",
-        example: "Family is important to her.",
-        cefrLevel: "A2" as CEFRLevel,
-      },
-    ],
-  },
-  {
-    title: "Climate Change and Coastal Cities",
-    content:
-      "Coastal cities around the world are facing unprecedented challenges due to rising sea levels. Researchers estimate that by 2050, millions of residents may need to relocate. Local governments are investing in infrastructure such as seawalls and pumping systems, but these measures may not be sufficient. The situation requires both immediate adaptation and long-term mitigation strategies.",
-    cefrLevel: "B2" as CEFRLevel,
-    words: [
-      {
-        word: "unprecedented",
-        definition: "never having happened or existed in the past",
-        example: "The pandemic caused unprecedented disruption globally.",
-        cefrLevel: "C1" as CEFRLevel,
-      },
-      {
-        word: "relocate",
-        definition: "to move to a new place",
-        example: "The company relocated to a bigger office.",
-        cefrLevel: "B2" as CEFRLevel,
-      },
-      {
-        word: "infrastructure",
-        definition: "the basic systems and services that a country needs",
-        example: "The country needs to invest in transport infrastructure.",
-        cefrLevel: "B2" as CEFRLevel,
-      },
-      {
-        word: "mitigation",
-        definition: "the act of reducing how harmful something is",
-        example: "Mitigation of climate change requires global cooperation.",
-        cefrLevel: "C1" as CEFRLevel,
-      },
-    ],
-  },
-];
+// ============ Key management ============
 
-function findContextSentence(content: string, word: string): string {
-  const sentences = content.split(/(?<=[.!?])\s+/);
-  const lower = word.toLowerCase();
-  const found = sentences.find((s) =>
-    s.toLowerCase().includes(lower)
+interface KeyState {
+  keys: string[];
+  currentIndex: number;
+  disabledUntil: number[]; // epoch ms per key; 0 = available
+}
+
+let keyState: KeyState | null = null;
+
+function loadKeys(): KeyState {
+  if (keyState) return keyState;
+  const raw = process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY || "";
+  const keys = raw
+    .split(",")
+    .map((k) => k.trim())
+    .filter((k) => k.length > 0);
+  keyState = {
+    keys,
+    currentIndex: 0,
+    disabledUntil: new Array(keys.length).fill(0),
+  };
+  return keyState;
+}
+
+export function isGeminiConfigured(): boolean {
+  return loadKeys().keys.length > 0;
+}
+
+function getActiveClient(): { client: GoogleGenAI; keyIndex: number } | null {
+  const state = loadKeys();
+  if (state.keys.length === 0) return null;
+
+  const now = Date.now();
+  // Find first available key (not disabled)
+  for (let i = 0; i < state.keys.length; i++) {
+    const idx = (state.currentIndex + i) % state.keys.length;
+    if (state.disabledUntil[idx] <= now) {
+      state.currentIndex = idx;
+      return {
+        client: new GoogleGenAI({ apiKey: state.keys[idx] }),
+        keyIndex: idx,
+      };
+    }
+  }
+  // All keys disabled — throw with shortest cooldown
+  const minCooldown = Math.min(...state.disabledUntil) - now;
+  throw new GeminiError(
+    `All API keys rate-limited. Retry in ${Math.ceil(minCooldown / 1000)}s.`,
+    "RATE_LIMITED",
+    429
   );
-  return found ?? sentences[0] ?? "";
 }
 
-function findWordPosition(content: string, word: string): number {
-  const idx = content.toLowerCase().indexOf(word.toLowerCase());
-  return idx === -1 ? 0 : idx;
+function disableKey(keyIndex: number, durationMs: number) {
+  const state = loadKeys();
+  if (state.disabledUntil[keyIndex] !== undefined) {
+    state.disabledUntil[keyIndex] = Date.now() + durationMs;
+  }
 }
 
-function estimateCEFR(content: string): CEFRLevel {
-  // Naive heuristic: longer avg sentence length → higher CEFR
-  const sentences = content.split(/(?<=[.!?])\s+/).filter((s) => s.length > 0);
-  if (sentences.length === 0) return "A2";
-  const avgLen =
-    sentences.reduce((sum, s) => sum + s.split(/\s+/).length, 0) /
-    sentences.length;
-  if (avgLen < 10) return "A2";
-  if (avgLen < 14) return "B1";
-  if (avgLen < 18) return "B2";
-  return "C1";
+// ============ Error class ============
+
+export class GeminiError extends Error {
+  code: string;
+  statusCode: number;
+  constructor(message: string, code: string, statusCode: number) {
+    super(message);
+    this.name = "GeminiError";
+    this.code = code;
+    this.statusCode = statusCode;
+  }
 }
 
-/**
- * Mock analyze endpoint: extract vocabulary + estimate CEFR + summary
- */
-export async function analyzeText(content: string): Promise<AnalyzeResponse> {
-  // Simulate network latency
-  await new Promise((r) => setTimeout(r, 400));
+// ============ Model config ============
 
-  // Find best matching mock text by length similarity, else synthesize
-  const match = MOCK_TEXTS.find(
-    (t) =>
-      t.content.length > 0 &&
-      Math.abs(t.content.length - content.length) <
-        Math.max(t.content.length, content.length) * 0.3
+// Gemini 2.5 Flash — latest + most optimized for text tasks at free tier
+const MODEL_ID = "gemini-2.5-flash";
+
+// ============ Core call with rotation ============
+
+interface CallOptions {
+  prompt: string;
+  systemInstruction?: string;
+  responseMimeType?: "application/json" | "text/plain";
+  responseSchema?: unknown;
+  maxRetries?: number;
+}
+
+async function callGemini(opts: CallOptions): Promise<string> {
+  const maxRetries = opts.maxRetries ?? loadKeys().keys.length;
+  let lastError: Error | null = null;
+
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    const active = getActiveClient();
+    if (!active) {
+      throw new GeminiError(
+        "Gemini API keys not configured. Set GEMINI_API_KEYS environment variable (comma-separated for rotation).",
+        "NOT_CONFIGURED",
+        503
+      );
+    }
+
+    try {
+      const response = await active.client.models.generateContent({
+        model: MODEL_ID,
+        contents: opts.prompt,
+        config: {
+          systemInstruction: opts.systemInstruction,
+          responseMimeType: opts.responseMimeType ?? "application/json",
+          responseSchema: opts.responseSchema,
+          temperature: 0.7,
+        },
+      });
+      return response.text ?? "";
+    } catch (err: unknown) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      const msg = lastError.message.toLowerCase();
+
+      // Rate limit → disable key 60s, rotate to next
+      if (msg.includes("429") || msg.includes("rate limit") || msg.includes("resource_exhausted")) {
+        disableKey(active.keyIndex, 60_000); // 60s cooldown
+        continue;
+      }
+      // Invalid key → disable 5 min, rotate
+      if (msg.includes("401") || msg.includes("403") || msg.includes("invalid_api_key") || msg.includes("permission_denied")) {
+        disableKey(active.keyIndex, 300_000); // 5 min cooldown
+        continue;
+      }
+      // Other errors → don't retry
+      throw new GeminiError(
+        `Gemini API error: ${lastError.message}`,
+        "API_ERROR",
+        500
+      );
+    }
+  }
+
+  throw new GeminiError(
+    `Gemini API failed after ${maxRetries} attempts. Last error: ${lastError?.message ?? "unknown"}`,
+    "MAX_RETRIES",
+    503
   );
+}
 
-  const cefrLevel = match?.cefrLevel ?? estimateCEFR(content);
-  const title = match?.title ?? `Reading ${new Date().toLocaleDateString()}`;
-  const summary = match
-    ? `This text describes ${match.title.toLowerCase()}. It covers daily life situations and vocabulary at ${cefrLevel} level.`
-    : `This text is approximately ${cefrLevel} level based on sentence complexity. Read it carefully and look up unfamiliar words.`;
+// ============ Public: analyze text ============
 
-  const words = match?.words ?? [
-    {
-      word: "important",
-      definition: "having great significance or value",
-      example: "This is an important decision.",
-      cefrLevel: "A2" as CEFRLevel,
+const ANALYZE_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    title: { type: Type.STRING, description: "Short title (max 80 chars) summarizing the text" },
+    cefrLevel: {
+      type: Type.STRING,
+      enum: ["A1", "A2", "B1", "B2", "C1", "C2"],
+      description: "Estimated CEFR difficulty level",
     },
-  ];
+    summary: { type: Type.STRING, description: "1-2 sentence summary of the text" },
+    highlightedWords: {
+      type: Type.ARRAY,
+      description: "3-8 vocabulary words worth learning from this text",
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          word: { type: Type.STRING },
+          definition: { type: Type.STRING, description: "Concise definition matching how the word is used in context" },
+          example: { type: Type.STRING, description: "A different example sentence using the word" },
+          cefrLevel: {
+            type: Type.STRING,
+            enum: ["A1", "A2", "B1", "B2", "C1", "C2"],
+          },
+        },
+        required: ["word", "definition", "example", "cefrLevel"],
+      },
+    },
+  },
+  required: ["title", "cefrLevel", "summary", "highlightedWords"],
+};
 
-  const highlightedWords = words.map((w) => {
-    const contextSentence = findContextSentence(content, w.word);
+export async function analyzeText(content: string): Promise<AnalyzeResponse> {
+  const prompt = `Analyze the following English text for a language learner.\n\nText:\n"""\n${content}\n"""\n\nExtract 3-8 vocabulary words that are worth learning (skip trivial words like "the", "and"). For each word, provide a definition matching its usage in context, a different example sentence, and its CEFR level. Also estimate the overall CEFR level of the text and provide a short title and summary.`;
+
+  const raw = await callGemini({
+    prompt,
+    systemInstruction:
+      "You are an English language teacher. You help learners by extracting vocabulary from texts and providing clear, accurate definitions. Always respond in valid JSON matching the requested schema.",
+    responseMimeType: "application/json",
+    responseSchema: ANALYZE_SCHEMA,
+  });
+
+  const parsed = JSON.parse(raw) as {
+    title: string;
+    cefrLevel: CEFRLevel;
+    summary: string;
+    highlightedWords: Array<{
+      word: string;
+      definition: string;
+      example: string;
+      cefrLevel: CEFRLevel;
+    }>;
+  };
+
+  // Build full response with position + contextSentence
+  const highlightedWords = parsed.highlightedWords.map((w) => {
+    const lowerContent = content.toLowerCase();
+    const lowerWord = w.word.toLowerCase();
+    const position = lowerContent.indexOf(lowerWord);
+    const safePosition = position === -1 ? 0 : position;
+
+    // Find context sentence
+    const sentences = content.split(/(?<=[.!?])\s+/);
+    const contextSentence =
+      sentences.find((s) => s.toLowerCase().includes(lowerWord)) ?? sentences[0] ?? "";
+
     return {
       word: w.word,
       lemma: w.word.toLowerCase(),
-      position: findWordPosition(content, w.word),
+      position: safePosition,
       cefrLevel: w.cefrLevel,
       definition: w.definition,
       example: w.example,
@@ -141,61 +229,68 @@ export async function analyzeText(content: string): Promise<AnalyzeResponse> {
     };
   });
 
-  return { title, cefrLevel, summary, highlightedWords };
+  return {
+    title: parsed.title,
+    cefrLevel: parsed.cefrLevel,
+    summary: parsed.summary,
+    highlightedWords,
+  };
 }
 
-/**
- * Mock quiz generator: produce mixed-type questions
- */
+// ============ Public: generate quiz ============
+
+const QUIZ_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    questions: {
+      type: Type.ARRAY,
+      description: "Mixed-format quiz questions",
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          type: {
+            type: Type.STRING,
+            enum: ["mcq", "cloze", "recall"],
+            description: "Question format",
+          },
+          question: { type: Type.STRING },
+          options: {
+            type: Type.ARRAY,
+            items: { type: Type.STRING },
+            description: "MCQ options (required for type=mcq, omit otherwise)",
+          },
+          correctAnswer: { type: Type.STRING },
+          relatedWord: {
+            type: Type.STRING,
+            description: "The vocabulary word this question tests (for memory model update)",
+          },
+        },
+        required: ["type", "question", "correctAnswer"],
+      },
+    },
+  },
+  required: ["questions"],
+};
+
 export async function generateQuiz(
-  textId: string,
+  _textId: string,
   text: string,
   vocabList: Array<{ word: string; definition: string; contextSentence: string }>
 ): Promise<QuizResponse> {
-  await new Promise((r) => setTimeout(r, 400));
+  const vocabContext = vocabList.length > 0
+    ? `\n\nVocabulary words the user has saved from this text (use these for cloze and recall questions):\n${vocabList.map(v => `- ${v.word}: ${v.definition} (context: "${v.contextSentence}")`).join("\n")}`
+    : "";
 
-  const questions: QuizResponse["questions"] = [];
+  const prompt = `Generate a mixed-format reading comprehension quiz for the following English text.\n\nText:\n"""\n${text}\n"""\n\nRequirements:\n- Exactly 1 gist question (main idea) in MCQ format with 4 options\n- 2-3 cloze questions using ACTUAL sentences from the text with the target word removed (replace with _____)\n- 1 recall question asking the user to type the word matching a definition\n- Total: 4-5 questions\n- For cloze and recall questions, include "relatedWord" so we can update the user's memory model\n- correctAnswer for cloze = the original word; for recall = the target word; for mcq = the exact correct option text${vocabContext}`;
 
-  // 1 gist question (mcq)
-  questions.push({
-    type: "mcq",
-    question: "What is the main idea of this text?",
-    options: [
-      "It describes a personal routine and its meaning to the person.",
-      "It argues that coffee is unhealthy.",
-      "It explains how to make a perfect latte.",
-      "It compares different coffee shops in a city.",
-    ],
-    correctAnswer:
-      "It describes a personal routine and its meaning to the person.",
+  const raw = await callGemini({
+    prompt,
+    systemInstruction:
+      "You are an English language teacher creating quizzes. Mix question types (mcq, cloze, recall) to keep learning engaging. Always respond in valid JSON matching the requested schema.",
+    responseMimeType: "application/json",
+    responseSchema: QUIZ_SCHEMA,
   });
 
-  // 2-3 cloze questions using vocabList
-  const clozeWords = vocabList.slice(0, 3);
-  for (const v of clozeWords) {
-    if (!v.contextSentence || !v.contextSentence.includes(v.word)) continue;
-    const clozeSentence = v.contextSentence.replace(
-      new RegExp(v.word, "i"),
-      "_____"
-    );
-    questions.push({
-      type: "cloze",
-      question: `Fill in the blank: ${clozeSentence}`,
-      correctAnswer: v.word,
-      relatedWord: v.word,
-    });
-  }
-
-  // 1 recall question (definition recall)
-  if (vocabList.length > 0) {
-    const target = vocabList[0];
-    questions.push({
-      type: "recall",
-      question: `Write the word that means: "${target.definition}"`,
-      correctAnswer: target.word,
-      relatedWord: target.word,
-    });
-  }
-
-  return { questions };
+  const parsed = JSON.parse(raw) as QuizResponse;
+  return parsed;
 }

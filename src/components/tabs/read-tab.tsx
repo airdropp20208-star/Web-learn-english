@@ -16,7 +16,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
-import { Sparkles, Save, FileText } from "lucide-react";
+import { Sparkles, Save, FileText, AlertCircle } from "lucide-react";
 import type { AnalyzeResponse, CEFRLevel, TextDTO, VocabItemDTO } from "@/lib/types";
 import { createText, saveVocabItem, getTexts } from "@/lib/storage";
 
@@ -41,6 +41,7 @@ export function ReadTab({ userId }: ReadTabProps) {
   const [savedVocabIds, setSavedVocabIds] = useState<Set<string>>(new Set());
   const [history, setHistory] = useState<TextDTO[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [featureError, setFeatureError] = useState<string | null>(null);
 
   async function loadHistory() {
     setLoadingHistory(true);
@@ -67,6 +68,7 @@ export function ReadTab({ userId }: ReadTabProps) {
     setAnalysis(null);
     setSavedText(null);
     setSavedVocabIds(new Set());
+    setFeatureError(null);
     try {
       const res = await fetch("/api/analyze", {
         method: "POST",
@@ -75,6 +77,13 @@ export function ReadTab({ userId }: ReadTabProps) {
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
+        if (res.status === 503) {
+          setFeatureError(
+            err.message ??
+              "AI feature unavailable. Set GEMINI_API_KEYS environment variable on Vercel to enable."
+          );
+          throw new Error(err.message ?? "AI not configured");
+        }
         throw new Error(err.error ?? "Analyze failed");
       }
       const data: AnalyzeResponse = await res.json();
@@ -92,7 +101,7 @@ export function ReadTab({ userId }: ReadTabProps) {
       toast.success(`Saved as "${data.title}"`);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Unknown error";
-      toast.error(msg);
+      if (!featureError) toast.error(msg);
     } finally {
       setAnalyzing(false);
     }
@@ -224,6 +233,26 @@ export function ReadTab({ userId }: ReadTabProps) {
               <div className="flex gap-2">
                 <Skeleton className="h-6 w-16" />
                 <Skeleton className="h-6 w-16" />
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {featureError && !analyzing && (
+          <Card className="border-amber-300 bg-amber-50 dark:bg-amber-950/30">
+            <CardContent className="p-4 flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <div className="font-medium text-amber-900 dark:text-amber-200">
+                  AI feature unavailable
+                </div>
+                <p className="text-sm text-amber-800 dark:text-amber-300">
+                  {featureError}
+                </p>
+                <p className="text-xs text-amber-700 dark:text-amber-400 mt-2">
+                  Set <code className="px-1 py-0.5 rounded bg-amber-100 dark:bg-amber-900">GEMINI_API_KEYS</code> environment variable on Vercel
+                  (Project → Settings → Environment Variables). Use comma-separated values for multi-key rotation.
+                </p>
               </div>
             </CardContent>
           </Card>

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { generateQuiz } from "@/lib/ai-client";
+import { generateQuiz, GeminiError } from "@/lib/ai-client";
 
 export const runtime = "nodejs";
 
@@ -20,6 +20,15 @@ export async function POST(req: NextRequest) {
     const result = await generateQuiz(textId ?? "unknown", text, vocab);
     return NextResponse.json(result);
   } catch (err: unknown) {
+    if (err instanceof GeminiError) {
+      return NextResponse.json(
+        {
+          error: err.message,
+          code: err.code,
+        },
+        { status: err.statusCode }
+      );
+    }
     const message = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json({ error: message }, { status: 500 });
   }

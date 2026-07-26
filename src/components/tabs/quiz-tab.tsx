@@ -23,7 +23,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
-import { ListChecks, CheckCircle2, XCircle, RotateCcw } from "lucide-react";
+import { ListChecks, CheckCircle2, XCircle, RotateCcw, AlertCircle } from "lucide-react";
 import type { QuizResponse, TextDTO, VocabItemDTO, QuizType } from "@/lib/types";
 import { getTexts, getVocabItems, saveQuizQuestions, getMemoryItems, updateMemoryAfterReview } from "@/lib/storage";
 import { computeUpdatedHalfLife } from "@/lib/mastery-engine";
@@ -51,6 +51,7 @@ export function QuizTab({ userId }: QuizTabProps) {
   const [submitted, setSubmitted] = useState(false);
   const [timings, setTimings] = useState<Record<number, number>>({});
   const [questionStart, setQuestionStart] = useState<number>(Date.now());
+  const [featureError, setFeatureError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -86,6 +87,7 @@ export function QuizTab({ userId }: QuizTabProps) {
     setQuestions([]);
     setAnswers({});
     setSubmitted(false);
+    setFeatureError(null);
     try {
       const vocabForQuiz = vocabs
         .filter((v) => v.sourceTextId === selectedText.id)
@@ -103,14 +105,25 @@ export function QuizTab({ userId }: QuizTabProps) {
           vocabList: vocabForQuiz,
         }),
       });
-      if (!res.ok) throw new Error("Quiz generation failed");
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        if (res.status === 503) {
+          setFeatureError(
+            err.message ??
+              "AI feature unavailable. Set GEMINI_API_KEYS environment variable on Vercel to enable."
+          );
+          throw new Error(err.message ?? "AI not configured");
+        }
+        throw new Error(err.error ?? "Quiz generation failed");
+      }
       const data: QuizResponse = await res.json();
       setQuestions(data.questions);
       setQuestionStart(Date.now());
       // Persist questions to DB
       await saveQuizQuestions(userId, selectedText.id, data.questions);
     } catch (e: unknown) {
-      toast.error("Failed to generate quiz");
+      const msg = e instanceof Error ? e.message : "Failed to generate quiz";
+      if (!featureError) toast.error(msg);
     } finally {
       setGenerating(false);
     }
@@ -236,6 +249,26 @@ export function QuizTab({ userId }: QuizTabProps) {
           </Button>
         </CardContent>
       </Card>
+
+      {featureError && (
+        <Card className="border-amber-300 bg-amber-50 dark:bg-amber-950/30">
+          <CardContent className="p-4 flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <div className="font-medium text-amber-900 dark:text-amber-200">
+                AI feature unavailable
+              </div>
+              <p className="text-sm text-amber-800 dark:text-amber-300">
+                {featureError}
+              </p>
+              <p className="text-xs text-amber-700 dark:text-amber-400 mt-2">
+                Set <code className="px-1 py-0.5 rounded bg-amber-100 dark:bg-amber-900">GEMINI_API_KEYS</code> environment variable on Vercel
+                (Project → Settings → Environment Variables). Use comma-separated values for multi-key rotation.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {questions.length > 0 && (
         <>
