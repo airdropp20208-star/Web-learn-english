@@ -1,10 +1,9 @@
 "use client";
 
-import { useSession, signIn, signOut } from "next-auth/react";
-import { useState } from "react";
+import { useSession, signIn } from "next-auth/react";
+import { useState, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Card,
   CardContent,
@@ -12,7 +11,19 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { BookOpen, Brain, Headphones, ListChecks, TrendingUp, NotebookPen, LogOut } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  BookOpen,
+  Brain,
+  Headphones,
+  ListChecks,
+  TrendingUp,
+  NotebookPen,
+  AlertCircle,
+  Github,
+} from "lucide-react";
+import { UserMenu } from "@/components/user-menu";
 import { ReadTab } from "@/components/tabs/read-tab";
 import { QuizTab } from "@/components/tabs/quiz-tab";
 import { ReviewTab } from "@/components/tabs/review-tab";
@@ -39,19 +50,51 @@ const TABS: TabDef[] = [
 ];
 
 export default function Home() {
+  return (
+    <Suspense fallback={<LoadingScreen />}>
+      <HomeContent />
+    </Suspense>
+  );
+}
+
+function LoadingScreen() {
+  return (
+    <div className="min-h-screen flex items-center justify-center">
+      <Skeleton className="h-8 w-32" />
+    </div>
+  );
+}
+
+function HomeContent() {
   const { data: session, status } = useSession();
-  const [activeTab, setActiveTab] = useState<TabId>("read");
+  const searchParams = useSearchParams();
+
+  // Derive initial tab + error from URL once (no setState in effect)
+  const initialTab = (() => {
+    const tab = searchParams.get("tab") as TabId | null;
+    return tab && TABS.some((t) => t.id === tab) ? tab : "read";
+  })();
+  const [activeTab, setActiveTab] = useState<TabId>(initialTab);
+
+  const authError = (() => {
+    const error = searchParams.get("error");
+    if (!error) return null;
+    const errorMessages: Record<string, string> = {
+      OAuthSignin: "GitHub OAuth could not be initiated. Check if GITHUB_ID and GITHUB_SECRET are set.",
+      OAuthCallback: "GitHub OAuth callback failed. The OAuth App callback URL may be misconfigured.",
+      OAuthCreateAccount: "Could not create user account from GitHub profile.",
+      Configuration: "NextAuth configuration error. Ensure NEXTAUTH_SECRET and NEXTAUTH_URL are set.",
+      default: "Sign-in failed. Please try again.",
+    };
+    return errorMessages[error] ?? errorMessages.default;
+  })();
 
   if (status === "loading") {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-pulse text-muted-foreground">Loading…</div>
-      </div>
-    );
+    return <LoadingScreen />;
   }
 
   if (!session) {
-    return <LoginForm />;
+    return <LoginForm authError={authError} />;
   }
 
   const userId = (session.user as { id?: string })?.id;
@@ -61,11 +104,15 @@ export default function Home() {
         <Card className="max-w-md w-full">
           <CardHeader>
             <CardTitle>Session error</CardTitle>
-            <CardDescription>User ID missing from session. Please sign out and try again.</CardDescription>
+            <CardDescription>
+              User ID missing from session. This usually means the sign-in
+              callback failed to upsert the user in the database. Sign out and
+              try again.
+            </CardDescription>
           </CardHeader>
           <CardContent>
-            <Button onClick={() => signOut()} variant="outline">
-              Sign out
+            <Button onClick={() => signIn("github", { callbackUrl: "/" })} variant="outline">
+              Re-sign-in with GitHub
             </Button>
           </CardContent>
         </Card>
@@ -75,10 +122,17 @@ export default function Home() {
 
   const active = TABS.find((t) => t.id === activeTab)!;
 
+  // Smart redirect: when user clicks a tab while signed out, we redirect to
+  // sign-in with ?tab=<id> so after login we restore the tab.
+  function handleSignedOutClick(targetTab?: string) {
+    const callbackUrl = targetTab ? `/?tab=${targetTab}` : "/";
+    signIn("github", { callbackUrl });
+  }
+
   return (
     <div className="min-h-screen flex flex-col bg-background">
       {/* Header */}
-      <header className="border-b bg-card">
+      <header className="border-b bg-card sticky top-0 z-40">
         <div className="flex items-center justify-between px-4 py-3 max-w-7xl mx-auto w-full">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-md bg-primary flex items-center justify-center text-primary-foreground font-bold">
@@ -90,13 +144,10 @@ export default function Home() {
             </span>
           </div>
           <div className="flex items-center gap-3">
-            <span className="text-sm text-muted-foreground hidden sm:inline">
-              {session.user?.name ?? session.user?.email}
-            </span>
-            <Button variant="ghost" size="sm" onClick={() => signOut()}>
-              <LogOut className="w-4 h-4 mr-1" />
-              Sign out
-            </Button>
+            <UserMenu
+              onSignedOutClick={handleSignedOutClick}
+              targetTab={activeTab}
+            />
           </div>
         </div>
       </header>
@@ -178,29 +229,15 @@ export default function Home() {
   );
 }
 
-function LoginForm() {
-  const [email, setEmail] = useState("");
-  const [name, setName] = useState("");
+function LoginForm({ authError }: { authError: string | null }) {
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!email.trim()) {
-      setError("Email is required");
-      return;
-    }
+  async function handleGitHubSignIn() {
     setLoading(true);
-    setError(null);
-    const res = await signIn("credentials", {
-      email,
-      name: name || undefined,
-      redirect: false,
-    });
-    setLoading(false);
-    if (!res?.ok) {
-      setError(res?.error ?? "Sign-in failed");
-    }
+    // signIn with redirect (not popup) for better mobile compat
+    // callbackUrl "/" — HomeContent will read ?tab= to restore tab
+    await signIn("github", { callbackUrl: "/" });
+    // signIn triggers a redirect, this line may not execute
   }
 
   return (
@@ -217,37 +254,40 @@ function LoginForm() {
             </div>
           </div>
         </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="you@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="name">Display name (optional)</Label>
-              <Input
-                id="name"
-                type="text"
-                placeholder="Your name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-              />
-            </div>
-            {error && <p className="text-sm text-destructive">{error}</p>}
-            <Button type="submit" disabled={loading} className="w-full">
-              {loading ? "Signing in…" : "Sign in / Sign up"}
-            </Button>
-            <p className="text-xs text-muted-foreground text-center">
-              Demo mode — no real auth. GitHub OAuth ready (set env vars).
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Sign in with your GitHub account to start reading, learning
+            vocabulary, and tracking your progress.
+          </p>
+
+          {authError && (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>Sign-in error</AlertTitle>
+              <AlertDescription>{authError}</AlertDescription>
+            </Alert>
+          )}
+
+          <Button
+            onClick={handleGitHubSignIn}
+            disabled={loading}
+            className="w-full"
+            size="lg"
+          >
+            <Github className="w-5 h-5 mr-2" />
+            {loading ? "Redirecting to GitHub…" : "Sign in with GitHub"}
+          </Button>
+
+          <div className="text-xs text-muted-foreground space-y-1">
+            <p>
+              <strong>First time here?</strong> Just sign in with GitHub — your
+              account will be created automatically.
             </p>
-          </form>
+            <p>
+              We only read your public GitHub profile and email. No password to
+              remember, no spam.
+            </p>
+          </div>
         </CardContent>
       </Card>
     </div>

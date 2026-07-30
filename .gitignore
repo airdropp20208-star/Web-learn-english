@@ -64,3 +64,9 @@ mini-services/
 examples/
 tests/
 .zscripts/
+
+# Token files (NEVER commit)
+scripts/.gh_token_tmp
+*.token
+*.secret
+

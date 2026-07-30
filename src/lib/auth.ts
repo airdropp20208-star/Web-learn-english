@@ -1,69 +1,53 @@
-// NextAuth configuration
-// Uses CredentialsProvider for MVP demo (no real auth needed locally)
-// GitHub OAuth ready: set GITHUB_ID + GITHUB_SECRET env vars to enable
+// NextAuth configuration — GitHub OAuth (real) + Prisma adapter for user sync
 
 import type { NextAuthOptions } from "next-auth";
-import CredentialsProvider from "next-auth/providers/credentials";
 import GitHubProvider from "next-auth/providers/github";
 import { db } from "./db";
 
-const enableGithub =
-  process.env.GITHUB_ID &&
-  process.env.GITHUB_SECRET &&
-  process.env.GITHUB_ID.length > 0;
+// GitHub OAuth is enabled only when both env vars are set.
+// Otherwise, sign-in will fail with a clear error message.
+const enableGithub = !!process.env.GITHUB_ID && !!process.env.GITHUB_SECRET;
+
+// NEXTAUTH_SECRET is required for JWT signing in production.
+if (!process.env.NEXTAUTH_SECRET && process.env.NODE_ENV === "production") {
+  console.warn(
+    "[auth] NEXTAUTH_SECRET is not set. JWT signing will be insecure in production."
+  );
+}
 
 export const authOptions: NextAuthOptions = {
   providers: [
-    // Credentials provider — for demo / local dev
-    // Creates or finds a user by email
-    CredentialsProvider({
-      name: "Demo Login",
-      credentials: {
-        email: {
-          label: "Email",
-          type: "email",
-          placeholder: "you@example.com",
-        },
-        name: { label: "Name", type: "text", placeholder: "Your name" },
-      },
-      async authorize(credentials) {
-        if (!credentials?.email) return null;
-        const email = credentials.email.trim().toLowerCase();
-        const name = credentials.name?.trim() || email.split("@")[0];
-
-        // Find or create user
-        let user = await db.user.findUnique({ where: { email } });
-        if (!user) {
-          user = await db.user.create({ data: { email, name } });
-        }
-
-        // Ensure UserProgress exists
-        const progress = await db.userProgress.findUnique({
-          where: { userId: user.id },
-        });
-        if (!progress) {
-          await db.userProgress.create({
-            data: { userId: user.id, currentTier: "A2" },
-          });
-        }
-
-        return { id: user.id, email: user.email, name: user.name };
-      },
-    }),
-    // GitHub OAuth — enable by setting env vars
     ...(enableGithub
       ? [
           GitHubProvider({
             clientId: process.env.GITHUB_ID!,
             clientSecret: process.env.GITHUB_SECRET!,
+            // Request user:email scope to get private emails
+            authorization: {
+              params: { scope: "read:user user:email" },
+            },
           }),
         ]
       : []),
   ],
   session: { strategy: "jwt" },
   callbacks: {
-    async jwt({ token, user }) {
-      if (user?.id) token.id = user.id;
+    async jwt({ token, user, account, profile }) {
+      // Initial sign-in: store user id + image
+      if (user?.id) {
+        token.id = user.id;
+      }
+      if (user?.image) {
+        token.image = user.image;
+      }
+      // Store GitHub username for display
+      if (account?.provider === "github" && profile) {
+        const ghProfile = profile as { login?: string; avatar_url?: string };
+        if (ghProfile.login) token.username = ghProfile.login;
+        if (ghProfile.avatar_url && !token.image) {
+          token.image = ghProfile.avatar_url;
+        }
+      }
       return token;
     },
     async session({ session, token }) {
@@ -71,11 +55,77 @@ export const authOptions: NextAuthOptions = {
         // @ts-expect-error — augment session.user with id
         session.user.id = token.id as string;
       }
+      if (session.user && token.image) {
+        session.user.image = token.image as string;
+      }
+      if (session.user && token.username) {
+        // @ts-expect-error — augment session.user with username
+        session.user.username = token.username as string;
+      }
       return session;
+    },
+    async signIn({ user, account, profile }) {
+      // For GitHub OAuth: create or update user in Prisma DB
+      if (account?.provider === "github" && user.email) {
+        try {
+          const ghProfile = profile as {
+            login?: string;
+            name?: string | null;
+            avatar_url?: string;
+          };
+
+          // Upsert user by email
+          const existing = await db.user.findUnique({
+            where: { email: user.email },
+          });
+
+          if (!existing) {
+            await db.user.create({
+              data: {
+                email: user.email,
+                name: user.name ?? ghProfile.login ?? null,
+                image: user.image ?? ghProfile.avatar_url ?? null,
+              },
+            });
+          } else {
+            // Update name/image if changed
+            await db.user.update({
+              where: { id: existing.id },
+              data: {
+                name: user.name ?? existing.name,
+                image: user.image ?? existing.image,
+              },
+            });
+          }
+
+          // Ensure UserProgress exists
+          const dbUser = await db.user.findUnique({
+            where: { email: user.email },
+          });
+          if (dbUser) {
+            const progress = await db.userProgress.findUnique({
+              where: { userId: dbUser.id },
+            });
+            if (!progress) {
+              await db.userProgress.create({
+                data: { userId: dbUser.id, currentTier: "A2" },
+              });
+            }
+
+            // Inject the DB user id into the user object so JWT callback can use it
+            user.id = dbUser.id;
+          }
+        } catch (err) {
+          console.error("[auth] Failed to upsert user:", err);
+          return false; // block sign-in on DB error
+        }
+      }
+      return true;
     },
   },
   pages: {
-    // We'll handle sign-in inline in the page; default API route stays
+    // Use custom sign-in page at root
     signIn: "/",
   },
+  secret: process.env.NEXTAUTH_SECRET,
 };
