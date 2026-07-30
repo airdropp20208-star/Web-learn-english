@@ -1,10 +1,7 @@
-// Storage helpers — bridge between UI and Prisma
-// All functions assume a logged-in user (passed userId)
-// "use server" → these become Next server actions, called via RPC from client
+// Storage helpers — localStorage-based (no database needed)
+// All functions use localStorage for persistence
+// Works entirely client-side
 
-"use server";
-
-import { db } from "./db";
 import type {
   MemoryItemDTO,
   VocabItemDTO,
@@ -17,22 +14,46 @@ import type {
   QuizType,
 } from "./types";
 
-// ============ Conversions (Prisma → DTO) ============
+// ============ localStorage helpers ============
 
-function toMemoryItemDTO(raw: any): MemoryItemDTO {
+function getStore<T>(key: string): T[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function setStore<T>(key: string, data: T[]): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(key, JSON.stringify(data));
+  } catch {
+    // localStorage full or unavailable
+  }
+}
+
+function generateId(): string {
+  if (typeof crypto !== "undefined" && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+}
+
+// ============ Conversions (raw → DTO) ============
+
+function toTextDTO(raw: any): TextDTO {
   return {
     id: raw.id,
     userId: raw.userId,
-    sourceTextId: raw.sourceTextId,
-    itemType: raw.itemType as ItemType,
-    refText: raw.refText,
+    title: raw.title,
+    content: raw.content,
     cefrLevel: raw.cefrLevel as CEFRLevel,
-    halfLifeDays: raw.halfLifeDays,
-    lastReviewedAt: raw.lastReviewedAt.getTime(),
-    correctHistory: JSON.parse(raw.correctHistory || "[]"),
-    latencyHistory: JSON.parse(raw.latencyHistory || "[]"),
-    createdAt: raw.createdAt.getTime(),
-    updatedAt: raw.updatedAt.getTime(),
+    summary: raw.summary,
+    createdAt: raw.createdAt,
+    updatedAt: raw.updatedAt,
   };
 }
 
@@ -47,20 +68,24 @@ function toVocabItemDTO(raw: any): VocabItemDTO {
     cefrLevel: raw.cefrLevel as CEFRLevel,
     sourceTextId: raw.sourceTextId,
     memoryItemId: raw.memoryItemId,
-    createdAt: raw.createdAt.getTime(),
+    createdAt: raw.createdAt,
   };
 }
 
-function toTextDTO(raw: any): TextDTO {
+function toMemoryItemDTO(raw: any): MemoryItemDTO {
   return {
     id: raw.id,
     userId: raw.userId,
-    title: raw.title,
-    content: raw.content,
+    sourceTextId: raw.sourceTextId,
+    itemType: raw.itemType as ItemType,
+    refText: raw.refText,
     cefrLevel: raw.cefrLevel as CEFRLevel,
-    summary: raw.summary,
-    createdAt: raw.createdAt.getTime(),
-    updatedAt: raw.updatedAt.getTime(),
+    halfLifeDays: raw.halfLifeDays,
+    lastReviewedAt: raw.lastReviewedAt,
+    correctHistory: raw.correctHistory ?? [],
+    latencyHistory: raw.latencyHistory ?? [],
+    createdAt: raw.createdAt,
+    updatedAt: raw.updatedAt,
   };
 }
 
@@ -71,10 +96,10 @@ function toQuizQuestionDTO(raw: any): QuizQuestionDTO {
     textId: raw.textId,
     type: raw.type as QuizType,
     question: raw.question,
-    options: JSON.parse(raw.options || "[]"),
+    options: raw.options ?? [],
     correctAnswer: raw.correctAnswer,
     relatedMemoryItemId: raw.relatedMemoryItemId,
-    createdAt: raw.createdAt.getTime(),
+    createdAt: raw.createdAt,
   };
 }
 
@@ -85,7 +110,7 @@ function toUserProgressDTO(raw: any): UserProgressDTO {
     currentTier: raw.currentTier as CEFRLevel,
     tierMasteryScore: raw.tierMasteryScore,
     streakDays: raw.streakDays,
-    lastActiveDate: raw.lastActiveDate.getTime(),
+    lastActiveDate: raw.lastActiveDate,
   };
 }
 
@@ -96,7 +121,7 @@ function toShadowSessionDTO(raw: any): ShadowSessionDTO {
     textId: raw.textId,
     audioUrl: raw.audioUrl,
     userRecordingUrl: raw.userRecordingUrl,
-    completedAt: raw.completedAt.getTime(),
+    completedAt: raw.completedAt,
   };
 }
 
@@ -106,22 +131,33 @@ export async function createText(
   userId: string,
   data: { title: string; content: string; cefrLevel: CEFRLevel; summary?: string }
 ): Promise<TextDTO> {
-  const text = await db.text.create({
-    data: { userId, ...data, summary: data.summary ?? null },
-  });
+  const key = `texts:${userId}`;
+  const texts = getStore<any>(key);
+  const now = Date.now();
+  const text = {
+    id: generateId(),
+    userId,
+    title: data.title,
+    content: data.content,
+    cefrLevel: data.cefrLevel,
+    summary: data.summary ?? null,
+    createdAt: now,
+    updatedAt: now,
+  };
+  texts.unshift(text);
+  setStore(key, texts);
   return toTextDTO(text);
 }
 
 export async function getTexts(userId: string): Promise<TextDTO[]> {
-  const texts = await db.text.findMany({
-    where: { userId },
-    orderBy: { createdAt: "desc" },
-  });
-  return texts.map(toTextDTO);
+  const key = `texts:${userId}`;
+  return getStore<any>(key).map(toTextDTO);
 }
 
 export async function getText(userId: string, textId: string): Promise<TextDTO | null> {
-  const text = await db.text.findFirst({ where: { id: textId, userId } });
+  const key = `texts:${userId}`;
+  const texts = getStore<any>(key);
+  const text = texts.find((t: any) => t.id === textId);
   return text ? toTextDTO(text) : null;
 }
 
@@ -138,33 +174,46 @@ export async function saveVocabItem(
     sourceTextId: string;
   }
 ): Promise<{ vocabItem: VocabItemDTO; memoryItem: MemoryItemDTO }> {
-  // Create MemoryItem first (halfLifeDays = 1, lastReviewedAt = now)
-  const memoryItem = await db.memoryItem.create({
-    data: {
-      userId,
-      sourceTextId: data.sourceTextId,
-      itemType: "word",
-      refText: data.contextSentence,
-      cefrLevel: data.cefrLevel,
-      halfLifeDays: 1.0,
-      lastReviewedAt: new Date(),
-      correctHistory: "[]",
-      latencyHistory: "[]",
-    },
-  });
+  const now = Date.now();
+  const memoryId = generateId();
 
-  const vocabItem = await db.vocabItem.create({
-    data: {
-      userId,
-      word: data.word,
-      definition: data.definition,
-      exampleSentence: data.exampleSentence,
-      contextSentence: data.contextSentence,
-      cefrLevel: data.cefrLevel,
-      sourceTextId: data.sourceTextId,
-      memoryItemId: memoryItem.id,
-    },
-  });
+  // Create memory item
+  const memKey = `memory:${userId}`;
+  const memories = getStore<any>(memKey);
+  const memoryItem = {
+    id: memoryId,
+    userId,
+    sourceTextId: data.sourceTextId,
+    itemType: "word",
+    refText: data.contextSentence,
+    cefrLevel: data.cefrLevel,
+    halfLifeDays: 1.0,
+    lastReviewedAt: now,
+    correctHistory: [],
+    latencyHistory: [],
+    createdAt: now,
+    updatedAt: now,
+  };
+  memories.push(memoryItem);
+  setStore(memKey, memories);
+
+  // Create vocab item
+  const vocabKey = `vocab:${userId}`;
+  const vocabs = getStore<any>(vocabKey);
+  const vocabItem = {
+    id: generateId(),
+    userId,
+    word: data.word,
+    definition: data.definition,
+    exampleSentence: data.exampleSentence,
+    contextSentence: data.contextSentence,
+    cefrLevel: data.cefrLevel,
+    sourceTextId: data.sourceTextId,
+    memoryItemId: memoryId,
+    createdAt: now,
+  };
+  vocabs.push(vocabItem);
+  setStore(vocabKey, vocabs);
 
   return {
     vocabItem: toVocabItemDTO(vocabItem),
@@ -173,40 +222,43 @@ export async function saveVocabItem(
 }
 
 export async function getVocabItems(userId: string): Promise<VocabItemDTO[]> {
-  const items = await db.vocabItem.findMany({
-    where: { userId },
-    orderBy: { createdAt: "desc" },
-  });
-  return items.map(toVocabItemDTO);
+  const key = `vocab:${userId}`;
+  return getStore<any>(key).map(toVocabItemDTO);
 }
 
 export async function getMemoryItems(userId: string): Promise<MemoryItemDTO[]> {
-  const items = await db.memoryItem.findMany({ where: { userId } });
-  return items.map(toMemoryItemDTO);
+  const key = `memory:${userId}`;
+  return getStore<any>(key).map(toMemoryItemDTO);
 }
 
 export async function updateMemoryAfterReview(
   memoryItemId: string,
   data: { correct: boolean; latencyMs: number; newHalfLife: number }
 ): Promise<MemoryItemDTO | null> {
-  const existing = await db.memoryItem.findUnique({ where: { id: memoryItemId } });
-  if (!existing) return null;
+  // Search across all users' memory items
+  const keys = Object.keys(localStorage).filter((k) => k.startsWith("memory:"));
+  for (const key of keys) {
+    const memories = getStore<any>(key);
+    const idx = memories.findIndex((m: any) => m.id === memoryItemId);
+    if (idx !== -1) {
+      const item = memories[idx];
+      const correctHistory: boolean[] = item.correctHistory ?? [];
+      const latencyHistory: number[] = item.latencyHistory ?? [];
+      correctHistory.push(data.correct);
+      latencyHistory.push(data.latencyMs);
 
-  const correctHistory: boolean[] = JSON.parse(existing.correctHistory || "[]");
-  const latencyHistory: number[] = JSON.parse(existing.latencyHistory || "[]");
-  correctHistory.push(data.correct);
-  latencyHistory.push(data.latencyMs);
+      item.halfLifeDays = data.newHalfLife;
+      item.lastReviewedAt = Date.now();
+      item.correctHistory = correctHistory;
+      item.latencyHistory = latencyHistory;
+      item.updatedAt = Date.now();
 
-  const updated = await db.memoryItem.update({
-    where: { id: memoryItemId },
-    data: {
-      halfLifeDays: data.newHalfLife,
-      lastReviewedAt: new Date(),
-      correctHistory: JSON.stringify(correctHistory),
-      latencyHistory: JSON.stringify(latencyHistory),
-    },
-  });
-  return toMemoryItemDTO(updated);
+      memories[idx] = item;
+      setStore(key, memories);
+      return toMemoryItemDTO(item);
+    }
+  }
+  return null;
 }
 
 // ============ Quiz Questions ============
@@ -222,21 +274,23 @@ export async function saveQuizQuestions(
     relatedMemoryItemId?: string | null;
   }>
 ): Promise<QuizQuestionDTO[]> {
-  const created = await db.$transaction(
-    questions.map((q) =>
-      db.quizQuestion.create({
-        data: {
-          userId,
-          textId,
-          type: q.type,
-          question: q.question,
-          options: JSON.stringify(q.options ?? []),
-          correctAnswer: q.correctAnswer,
-          relatedMemoryItemId: q.relatedMemoryItemId ?? null,
-        },
-      })
-    )
-  );
+  const key = `quizzes:${userId}`;
+  const existing = getStore<any>(key);
+  const now = Date.now();
+
+  const created = questions.map((q) => ({
+    id: generateId(),
+    userId,
+    textId,
+    type: q.type,
+    question: q.question,
+    options: q.options ?? [],
+    correctAnswer: q.correctAnswer,
+    relatedMemoryItemId: q.relatedMemoryItemId ?? null,
+    createdAt: now,
+  }));
+
+  setStore(key, [...created, ...existing]);
   return created.map(toQuizQuestionDTO);
 }
 
@@ -244,11 +298,11 @@ export async function getQuizQuestions(
   userId: string,
   textId: string
 ): Promise<QuizQuestionDTO[]> {
-  const items = await db.quizQuestion.findMany({
-    where: { userId, textId },
-    orderBy: { createdAt: "desc" },
-  });
-  return items.map(toQuizQuestionDTO);
+  const key = `quizzes:${userId}`;
+  const all = getStore<any>(key);
+  return all
+    .filter((q: any) => q.textId === textId)
+    .map(toQuizQuestionDTO);
 }
 
 // ============ User Progress ============
@@ -256,41 +310,61 @@ export async function getQuizQuestions(
 export async function getUserProgress(
   userId: string
 ): Promise<UserProgressDTO | null> {
-  const progress = await db.userProgress.findUnique({ where: { userId } });
-  return progress ? toUserProgressDTO(progress) : null;
+  const key = `progress:${userId}`;
+  const raw = localStorage.getItem(key);
+  if (!raw) return null;
+  try {
+    return toUserProgressDTO(JSON.parse(raw));
+  } catch {
+    return null;
+  }
 }
 
 export async function ensureUserProgress(userId: string): Promise<UserProgressDTO> {
-  const existing = await db.userProgress.findUnique({ where: { userId } });
-  if (existing) return toUserProgressDTO(existing);
-  const created = await db.userProgress.create({
-    data: { userId, currentTier: "A2" },
-  });
-  return toUserProgressDTO(created);
+  const existing = await getUserProgress(userId);
+  if (existing) return existing;
+
+  const now = Date.now();
+  const progress = {
+    id: generateId(),
+    userId,
+    currentTier: "A2",
+    tierMasteryScore: 0,
+    streakDays: 0,
+    lastActiveDate: now,
+  };
+  localStorage.setItem(`progress:${userId}`, JSON.stringify(progress));
+  return toUserProgressDTO(progress);
 }
 
 export async function updateTierMasteryScore(
   userId: string,
   score: number
 ): Promise<void> {
-  await db.userProgress.update({
-    where: { userId },
-    data: { tierMasteryScore: score, lastActiveDate: new Date() },
-  });
+  const key = `progress:${userId}`;
+  const raw = localStorage.getItem(key);
+  if (!raw) return;
+  const progress = JSON.parse(raw);
+  progress.tierMasteryScore = score;
+  progress.lastActiveDate = Date.now();
+  localStorage.setItem(key, JSON.stringify(progress));
 }
 
 export async function advanceTier(userId: string): Promise<UserProgressDTO | null> {
-  const progress = await db.userProgress.findUnique({ where: { userId } });
-  if (!progress) return null;
+  const key = `progress:${userId}`;
+  const raw = localStorage.getItem(key);
+  if (!raw) return null;
+
+  const progress = JSON.parse(raw);
   const order: CEFRLevel[] = ["A1", "A2", "B1", "B2", "C1", "C2"];
   const idx = order.indexOf(progress.currentTier as CEFRLevel);
   if (idx === -1 || idx === order.length - 1) return toUserProgressDTO(progress);
-  const next = order[idx + 1];
-  const updated = await db.userProgress.update({
-    where: { userId },
-    data: { currentTier: next, tierMasteryScore: 0 },
-  });
-  return toUserProgressDTO(updated);
+
+  progress.currentTier = order[idx + 1];
+  progress.tierMasteryScore = 0;
+  progress.lastActiveDate = Date.now();
+  localStorage.setItem(key, JSON.stringify(progress));
+  return toUserProgressDTO(progress);
 }
 
 // ============ Shadow Sessions ============
@@ -299,23 +373,24 @@ export async function createShadowSession(
   userId: string,
   data: { textId: string; audioUrl?: string; userRecordingUrl?: string }
 ): Promise<ShadowSessionDTO> {
-  const session = await db.shadowSession.create({
-    data: {
-      userId,
-      textId: data.textId,
-      audioUrl: data.audioUrl ?? "",
-      userRecordingUrl: data.userRecordingUrl ?? "",
-    },
-  });
+  const key = `shadows:${userId}`;
+  const sessions = getStore<any>(key);
+  const session = {
+    id: generateId(),
+    userId,
+    textId: data.textId,
+    audioUrl: data.audioUrl ?? "",
+    userRecordingUrl: data.userRecordingUrl ?? "",
+    completedAt: Date.now(),
+  };
+  sessions.unshift(session);
+  setStore(key, sessions);
   return toShadowSessionDTO(session);
 }
 
 export async function getShadowSessions(
   userId: string
 ): Promise<ShadowSessionDTO[]> {
-  const sessions = await db.shadowSession.findMany({
-    where: { userId },
-    orderBy: { completedAt: "desc" },
-  });
-  return sessions.map(toShadowSessionDTO);
+  const key = `shadows:${userId}`;
+  return getStore<any>(key).map(toShadowSessionDTO);
 }
