@@ -1,19 +1,8 @@
 "use client";
 
-import { useSession, signIn } from "next-auth/react";
 import { useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   BookOpen,
@@ -22,8 +11,6 @@ import {
   ListChecks,
   TrendingUp,
   NotebookPen,
-  AlertCircle,
-  Loader2,
 } from "lucide-react";
 import { UserMenu } from "@/components/user-menu";
 import { ReadTab } from "@/components/tabs/read-tab";
@@ -32,6 +19,7 @@ import { ReviewTab } from "@/components/tabs/review-tab";
 import { VocabTab } from "@/components/tabs/vocab-tab";
 import { ProgressTab } from "@/components/tabs/progress-tab";
 import { ShadowTab } from "@/components/tabs/shadow-tab";
+import { DEFAULT_USER_ID } from "@/lib/auth";
 
 type TabId = "read" | "quiz" | "review" | "vocab" | "progress" | "shadow";
 
@@ -51,6 +39,8 @@ const TABS: TabDef[] = [
   { id: "shadow", label: "Shadow", icon: Headphones, description: "Listen and shadow the audio of texts you read" },
 ];
 
+const userId = DEFAULT_USER_ID;
+
 export default function Home() {
   return (
     <Suspense fallback={<LoadingScreen />}>
@@ -68,7 +58,6 @@ function LoadingScreen() {
 }
 
 function HomeContent() {
-  const { data: session, status } = useSession();
   const searchParams = useSearchParams();
 
   const initialTab = (() => {
@@ -77,52 +66,7 @@ function HomeContent() {
   })();
   const [activeTab, setActiveTab] = useState<TabId>(initialTab);
 
-  const authError = (() => {
-    const error = searchParams.get("error");
-    if (!error) return null;
-    const errorMessages: Record<string, string> = {
-      CredentialsSignin: "Invalid username or password.",
-      Configuration: "NextAuth configuration error. Ensure NEXTAUTH_SECRET is set.",
-      default: "Sign-in failed. Please try again.",
-    };
-    return errorMessages[error] ?? errorMessages.default;
-  })();
-
-  if (status === "loading") {
-    return <LoadingScreen />;
-  }
-
-  if (!session) {
-    return <LoginForm authError={authError} initialMode="login" />;
-  }
-
-  const userId = (session.user as { id?: string })?.id;
-  if (!userId) {
-    return (
-      <div className="min-h-screen flex items-center justify-center p-6">
-        <Card className="max-w-md w-full">
-          <CardHeader>
-            <CardTitle>Session error</CardTitle>
-            <CardDescription>
-              User ID missing from session. Sign out and try again.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button onClick={() => signIn("credentials", { callbackUrl: "/" })} variant="outline">
-              Re-sign-in
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
   const active = TABS.find((t) => t.id === activeTab)!;
-
-  function handleSignedOutClick(targetTab?: string) {
-    const callbackUrl = targetTab ? `/?tab=${targetTab}` : "/";
-    signIn("credentials", { callbackUrl });
-  }
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
@@ -138,10 +82,7 @@ function HomeContent() {
             </span>
           </div>
           <div className="flex items-center gap-3">
-            <UserMenu
-              onSignedOutClick={handleSignedOutClick}
-              targetTab={activeTab}
-            />
+            <UserMenu />
           </div>
         </div>
       </header>
@@ -214,207 +155,6 @@ function HomeContent() {
           Learn English · MVP · Reading + Quiz + Mastery + Shadowing
         </div>
       </footer>
-    </div>
-  );
-}
-
-interface LoginFormProps {
-  authError: string | null;
-  initialMode: "login" | "signup";
-}
-
-function LoginForm({ authError, initialMode }: LoginFormProps) {
-  const [mode, setMode] = useState<"login" | "signup">(initialMode);
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [localError, setLocalError] = useState<string | null>(null);
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setLocalError(null);
-
-    if (!username.trim() || !password) {
-      setLocalError("Please enter username and password");
-      return;
-    }
-
-    setLoading(true);
-    const res = await signIn("credentials", {
-      username,
-      password,
-      mode,
-      redirect: false,
-    });
-    setLoading(false);
-
-    if (!res?.ok) {
-      // NextAuth wraps error in "CredentialsSignin" — extract real message
-      // from URL if present, otherwise show generic
-      const url = res?.url;
-      if (url) {
-        const params = new URL(url).searchParams;
-        const errorParam = params.get("error");
-        if (errorParam && errorParam !== "CredentialsSignin") {
-          setLocalError(errorParam);
-          return;
-        }
-      }
-      setLocalError(
-        mode === "signup"
-          ? "Sign up failed. Username may already be taken."
-          : "Invalid username or password."
-      );
-      return;
-    }
-
-    // Success — NextAuth will refresh the page session automatically
-    window.location.reload();
-  }
-
-  return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-background">
-      <Card className="max-w-md w-full">
-        <CardHeader>
-          <div className="flex items-center gap-2 mb-2">
-            <div className="w-10 h-10 rounded-md bg-primary flex items-center justify-center text-primary-foreground font-bold text-lg">
-              L
-            </div>
-            <div>
-              <CardTitle>Learn English</CardTitle>
-              <CardDescription>Reading · Quiz · Shadowing</CardDescription>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {/* Mode toggle */}
-          <div className="grid grid-cols-2 gap-1 p-1 bg-muted rounded-md">
-            <button
-              type="button"
-              onClick={() => {
-                setMode("login");
-                setLocalError(null);
-              }}
-              className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
-                mode === "login"
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              Sign in
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setMode("signup");
-                setLocalError(null);
-              }}
-              className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
-                mode === "signup"
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              Create account
-            </button>
-          </div>
-
-          {(authError || localError) && (
-            <Alert variant="destructive">
-              <AlertCircle className="h-4 w-4" />
-              <AlertTitle>
-                {mode === "signup" ? "Sign up error" : "Sign-in error"}
-              </AlertTitle>
-              <AlertDescription>{localError ?? authError}</AlertDescription>
-            </Alert>
-          )}
-
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="username">Username</Label>
-              <Input
-                id="username"
-                type="text"
-                autoComplete="username"
-                placeholder="your_username"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                required
-                minLength={3}
-                maxLength={30}
-                pattern="[a-zA-Z0-9_-]+"
-                title="Letters, numbers, underscore, hyphen only"
-              />
-              <p className="text-xs text-muted-foreground">
-                3-30 characters: letters, numbers, underscore, hyphen
-              </p>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                autoComplete={
-                  mode === "signup" ? "new-password" : "current-password"
-                }
-                placeholder="••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                minLength={6}
-              />
-              <p className="text-xs text-muted-foreground">
-                Minimum 6 characters
-              </p>
-            </div>
-            <Button type="submit" disabled={loading} className="w-full" size="lg">
-              {loading ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  {mode === "signup" ? "Creating account…" : "Signing in…"}
-                </>
-              ) : (
-                mode === "signup" ? "Create account" : "Sign in"
-              )}
-            </Button>
-          </form>
-
-          <div className="text-xs text-muted-foreground space-y-1">
-            {mode === "login" ? (
-              <p>
-                Don&apos;t have an account?{" "}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMode("signup");
-                    setLocalError(null);
-                  }}
-                  className="text-primary underline hover:no-underline"
-                >
-                  Create one
-                </button>
-              </p>
-            ) : (
-              <p>
-                Already have an account?{" "}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMode("login");
-                    setLocalError(null);
-                  }}
-                  className="text-primary underline hover:no-underline"
-                >
-                  Sign in
-                </button>
-              </p>
-            )}
-            <p className="text-muted-foreground/70">
-              No email required. Your data stays on this server only.
-            </p>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }

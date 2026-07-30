@@ -1,6 +1,10 @@
-import NextAuth from "next-auth";
-import { authOptions } from "@/lib/auth";
+// NextAuth removed — no auth needed
+// This route is kept as a stub to avoid 404s if anything references it
 
-const handler = NextAuth(authOptions);
+export async function GET() {
+  return Response.json({ authenticated: true, user: "local" });
+}
 
-export { handler as GET, handler as POST };
+export async function POST() {
+  return Response.json({ authenticated: true, user: "local" });
+}

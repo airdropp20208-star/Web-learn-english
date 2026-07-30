@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -54,9 +54,8 @@ export function ReadTab({ userId }: ReadTabProps) {
   }
 
   // Load history on mount
-  useMemo(() => {
+  useEffect(() => {
     loadHistory();
-     
   }, [userId]);
 
   async function handleAnalyze() {
