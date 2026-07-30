@@ -37,12 +37,11 @@ export function UserMenu({ onSignedOutClick, targetTab }: UserMenuProps) {
 
   const user = session.user as {
     name?: string | null;
-    email?: string | null;
-    image?: string | null;
     username?: string | null;
+    image?: string | null;
   };
 
-  const displayName = user.name ?? user.username ?? user.email ?? "User";
+  const displayName = user.username ?? user.name ?? "User";
   const initials = displayName
     .split(/\s+/)
     .slice(0, 2)
@@ -66,10 +65,12 @@ export function UserMenu({ onSignedOutClick, targetTab }: UserMenuProps) {
       <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuLabel>
           <div className="flex flex-col gap-0.5">
-            <span className="text-sm font-medium truncate">{displayName}</span>
-            <span className="text-xs text-muted-foreground truncate">
-              {user.email}
-            </span>
+            <span className="text-sm font-medium truncate">@{displayName}</span>
+            {user.name && user.name !== displayName && (
+              <span className="text-xs text-muted-foreground truncate">
+                {user.name}
+              </span>
+            )}
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />

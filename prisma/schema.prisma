@@ -1,31 +1,34 @@
 // Prisma schema for Web Learn English app
-// NextAuth v4 + app data models
+// NextAuth v4 (CredentialsProvider with username+password) + app data models
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
+  // Postgres for both local dev and Vercel prod
+  // Local: set DATABASE_URL in .env to your Vercel Postgres connection string
+  // Vercel: DATABASE_URL auto-set when you connect Postgres storage to project
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
 // =====================
-// NextAuth models
+// NextAuth models (kept for compatibility, even if CredentialsProvider
+// doesn't use Account/Session tables, leaving them avoids migration headaches)
 // =====================
 
 model User {
   id            String    @id @default(cuid())
+  username      String    @unique
+  passwordHash  String
   name          String?
-  email         String    @unique
-  emailVerified DateTime?
   image         String?
-  accounts      Account[]
-  sessions      Session[]
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  // App relations
+  accounts       Account[]
+  sessions       Session[]
   texts          Text[]
   memoryItems    MemoryItem[]
   vocabItems     VocabItem[]
@@ -83,10 +86,10 @@ model Text {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  memoryItems   MemoryItem[]
-  vocabItems    VocabItem[]
-  quizQuestions QuizQuestion[]
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  memoryItems    MemoryItem[]
+  vocabItems     VocabItem[]
+  quizQuestions  QuizQuestion[]
   shadowSessions ShadowSession[]
 
   @@index([userId, createdAt])
@@ -96,14 +99,13 @@ model MemoryItem {
   id              String   @id @default(cuid())
   userId          String
   sourceTextId    String
-  itemType        String   @default("word") // "word" | "grammar" | "gist"
+  itemType        String   @default("word")
   refText         String
   cefrLevel       String   @default("B1")
   halfLifeDays    Float    @default(1.0)
   lastReviewedAt  DateTime @default(now())
-  // SQLite does not support list primitives → store as JSON string
-  correctHistory  String   @default("[]") // JSON boolean[]
-  latencyHistory  String   @default("[]") // JSON number[]
+  correctHistory  String   @default("[]")
+  latencyHistory  String   @default("[]")
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -137,9 +139,9 @@ model QuizQuestion {
   id                  String   @id @default(cuid())
   userId              String
   textId              String
-  type                String   // "mcq" | "cloze" | "recall"
+  type                String
   question            String
-  options             String   @default("[]") // JSON string[]
+  options             String   @default("[]")
   correctAnswer       String
   relatedMemoryItemId String?
   createdAt           DateTime @default(now())
@@ -167,8 +169,8 @@ model ShadowSession {
   id              String   @id @default(cuid())
   userId          String
   textId          String
-  audioUrl        String   @default("") // for Web Speech API MVP, not used
-  userRecordingUrl String  @default("") // blob URL, ephemeral
+  audioUrl        String   @default("")
+  userRecordingUrl String  @default("")
   completedAt     DateTime @default(now())
 
   user       User @relation(fields: [userId], references: [id], onDelete: Cascade)

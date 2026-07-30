@@ -4,6 +4,8 @@ import { useSession, signIn } from "next-auth/react";
 import { useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Card,
   CardContent,
@@ -21,7 +23,7 @@ import {
   TrendingUp,
   NotebookPen,
   AlertCircle,
-  Github,
+  Loader2,
 } from "lucide-react";
 import { UserMenu } from "@/components/user-menu";
 import { ReadTab } from "@/components/tabs/read-tab";
@@ -69,7 +71,6 @@ function HomeContent() {
   const { data: session, status } = useSession();
   const searchParams = useSearchParams();
 
-  // Derive initial tab + error from URL once (no setState in effect)
   const initialTab = (() => {
     const tab = searchParams.get("tab") as TabId | null;
     return tab && TABS.some((t) => t.id === tab) ? tab : "read";
@@ -80,10 +81,8 @@ function HomeContent() {
     const error = searchParams.get("error");
     if (!error) return null;
     const errorMessages: Record<string, string> = {
-      OAuthSignin: "GitHub OAuth could not be initiated. Check if GITHUB_ID and GITHUB_SECRET are set.",
-      OAuthCallback: "GitHub OAuth callback failed. The OAuth App callback URL may be misconfigured.",
-      OAuthCreateAccount: "Could not create user account from GitHub profile.",
-      Configuration: "NextAuth configuration error. Ensure NEXTAUTH_SECRET and NEXTAUTH_URL are set.",
+      CredentialsSignin: "Invalid username or password.",
+      Configuration: "NextAuth configuration error. Ensure NEXTAUTH_SECRET is set.",
       default: "Sign-in failed. Please try again.",
     };
     return errorMessages[error] ?? errorMessages.default;
@@ -94,7 +93,7 @@ function HomeContent() {
   }
 
   if (!session) {
-    return <LoginForm authError={authError} />;
+    return <LoginForm authError={authError} initialMode="login" />;
   }
 
   const userId = (session.user as { id?: string })?.id;
@@ -105,14 +104,12 @@ function HomeContent() {
           <CardHeader>
             <CardTitle>Session error</CardTitle>
             <CardDescription>
-              User ID missing from session. This usually means the sign-in
-              callback failed to upsert the user in the database. Sign out and
-              try again.
+              User ID missing from session. Sign out and try again.
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Button onClick={() => signIn("github", { callbackUrl: "/" })} variant="outline">
-              Re-sign-in with GitHub
+            <Button onClick={() => signIn("credentials", { callbackUrl: "/" })} variant="outline">
+              Re-sign-in
             </Button>
           </CardContent>
         </Card>
@@ -122,16 +119,13 @@ function HomeContent() {
 
   const active = TABS.find((t) => t.id === activeTab)!;
 
-  // Smart redirect: when user clicks a tab while signed out, we redirect to
-  // sign-in with ?tab=<id> so after login we restore the tab.
   function handleSignedOutClick(targetTab?: string) {
     const callbackUrl = targetTab ? `/?tab=${targetTab}` : "/";
-    signIn("github", { callbackUrl });
+    signIn("credentials", { callbackUrl });
   }
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
-      {/* Header */}
       <header className="border-b bg-card sticky top-0 z-40">
         <div className="flex items-center justify-between px-4 py-3 max-w-7xl mx-auto w-full">
           <div className="flex items-center gap-2">
@@ -152,9 +146,7 @@ function HomeContent() {
         </div>
       </header>
 
-      {/* Body: sidebar + content */}
       <div className="flex-1 flex max-w-7xl mx-auto w-full">
-        {/* Sidebar — desktop */}
         <aside className="hidden md:flex w-56 border-r bg-card flex-col p-3 gap-1">
           {TABS.map((tab) => {
             const Icon = tab.icon;
@@ -176,7 +168,6 @@ function HomeContent() {
           })}
         </aside>
 
-        {/* Mobile tab bar */}
         <div className="md:hidden border-b bg-card overflow-x-auto">
           <div className="flex gap-1 px-2 py-2 min-w-max">
             {TABS.map((tab) => {
@@ -200,7 +191,6 @@ function HomeContent() {
           </div>
         </div>
 
-        {/* Main content */}
         <main className="flex-1 min-w-0 p-4 sm:p-6">
           <div className="mb-4">
             <h2 className="text-xl font-semibold flex items-center gap-2">
@@ -219,7 +209,6 @@ function HomeContent() {
         </main>
       </div>
 
-      {/* Footer */}
       <footer className="border-t bg-card mt-auto">
         <div className="px-4 py-3 text-xs text-muted-foreground text-center max-w-7xl mx-auto">
           Learn English · MVP · Reading + Quiz + Mastery + Shadowing
@@ -229,15 +218,58 @@ function HomeContent() {
   );
 }
 
-function LoginForm({ authError }: { authError: string | null }) {
-  const [loading, setLoading] = useState(false);
+interface LoginFormProps {
+  authError: string | null;
+  initialMode: "login" | "signup";
+}
 
-  async function handleGitHubSignIn() {
+function LoginForm({ authError, initialMode }: LoginFormProps) {
+  const [mode, setMode] = useState<"login" | "signup">(initialMode);
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [localError, setLocalError] = useState<string | null>(null);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setLocalError(null);
+
+    if (!username.trim() || !password) {
+      setLocalError("Please enter username and password");
+      return;
+    }
+
     setLoading(true);
-    // signIn with redirect (not popup) for better mobile compat
-    // callbackUrl "/" — HomeContent will read ?tab= to restore tab
-    await signIn("github", { callbackUrl: "/" });
-    // signIn triggers a redirect, this line may not execute
+    const res = await signIn("credentials", {
+      username,
+      password,
+      mode,
+      redirect: false,
+    });
+    setLoading(false);
+
+    if (!res?.ok) {
+      // NextAuth wraps error in "CredentialsSignin" — extract real message
+      // from URL if present, otherwise show generic
+      const url = res?.url;
+      if (url) {
+        const params = new URL(url).searchParams;
+        const errorParam = params.get("error");
+        if (errorParam && errorParam !== "CredentialsSignin") {
+          setLocalError(errorParam);
+          return;
+        }
+      }
+      setLocalError(
+        mode === "signup"
+          ? "Sign up failed. Username may already be taken."
+          : "Invalid username or password."
+      );
+      return;
+    }
+
+    // Success — NextAuth will refresh the page session automatically
+    window.location.reload();
   }
 
   return (
@@ -255,37 +287,130 @@ function LoginForm({ authError }: { authError: string | null }) {
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            Sign in with your GitHub account to start reading, learning
-            vocabulary, and tracking your progress.
-          </p>
+          {/* Mode toggle */}
+          <div className="grid grid-cols-2 gap-1 p-1 bg-muted rounded-md">
+            <button
+              type="button"
+              onClick={() => {
+                setMode("login");
+                setLocalError(null);
+              }}
+              className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                mode === "login"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Sign in
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setMode("signup");
+                setLocalError(null);
+              }}
+              className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                mode === "signup"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Create account
+            </button>
+          </div>
 
-          {authError && (
+          {(authError || localError) && (
             <Alert variant="destructive">
               <AlertCircle className="h-4 w-4" />
-              <AlertTitle>Sign-in error</AlertTitle>
-              <AlertDescription>{authError}</AlertDescription>
+              <AlertTitle>
+                {mode === "signup" ? "Sign up error" : "Sign-in error"}
+              </AlertTitle>
+              <AlertDescription>{localError ?? authError}</AlertDescription>
             </Alert>
           )}
 
-          <Button
-            onClick={handleGitHubSignIn}
-            disabled={loading}
-            className="w-full"
-            size="lg"
-          >
-            <Github className="w-5 h-5 mr-2" />
-            {loading ? "Redirecting to GitHub…" : "Sign in with GitHub"}
-          </Button>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="username">Username</Label>
+              <Input
+                id="username"
+                type="text"
+                autoComplete="username"
+                placeholder="your_username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                required
+                minLength={3}
+                maxLength={30}
+                pattern="[a-zA-Z0-9_-]+"
+                title="Letters, numbers, underscore, hyphen only"
+              />
+              <p className="text-xs text-muted-foreground">
+                3-30 characters: letters, numbers, underscore, hyphen
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="password">Password</Label>
+              <Input
+                id="password"
+                type="password"
+                autoComplete={
+                  mode === "signup" ? "new-password" : "current-password"
+                }
+                placeholder="••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                minLength={6}
+              />
+              <p className="text-xs text-muted-foreground">
+                Minimum 6 characters
+              </p>
+            </div>
+            <Button type="submit" disabled={loading} className="w-full" size="lg">
+              {loading ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  {mode === "signup" ? "Creating account…" : "Signing in…"}
+                </>
+              ) : (
+                mode === "signup" ? "Create account" : "Sign in"
+              )}
+            </Button>
+          </form>
 
           <div className="text-xs text-muted-foreground space-y-1">
-            <p>
-              <strong>First time here?</strong> Just sign in with GitHub — your
-              account will be created automatically.
-            </p>
-            <p>
-              We only read your public GitHub profile and email. No password to
-              remember, no spam.
+            {mode === "login" ? (
+              <p>
+                Don&apos;t have an account?{" "}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode("signup");
+                    setLocalError(null);
+                  }}
+                  className="text-primary underline hover:no-underline"
+                >
+                  Create one
+                </button>
+              </p>
+            ) : (
+              <p>
+                Already have an account?{" "}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode("login");
+                    setLocalError(null);
+                  }}
+                  className="text-primary underline hover:no-underline"
+                >
+                  Sign in
+                </button>
+              </p>
+            )}
+            <p className="text-muted-foreground/70">
+              No email required. Your data stays on this server only.
             </p>
           </div>
         </CardContent>

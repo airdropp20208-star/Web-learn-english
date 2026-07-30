@@ -1,62 +1,150 @@
-// NextAuth configuration — GitHub OAuth (real) + Prisma adapter for user sync
+// NextAuth configuration — CredentialsProvider with username + password
+// Handles both login and signup in one form (mode field in credentials)
 
 import type { NextAuthOptions } from "next-auth";
-import GitHubProvider from "next-auth/providers/github";
+import CredentialsProvider from "next-auth/providers/credentials";
+import bcrypt from "bcryptjs";
 import { db } from "./db";
 
-// GitHub OAuth is enabled only when both env vars are set.
-// Otherwise, sign-in will fail with a clear error message.
-const enableGithub = !!process.env.GITHUB_ID && !!process.env.GITHUB_SECRET;
-
-// NEXTAUTH_SECRET is required for JWT signing in production.
-if (!process.env.NEXTAUTH_SECRET && process.env.NODE_ENV === "production") {
-  console.warn(
-    "[auth] NEXTAUTH_SECRET is not set. JWT signing will be insecure in production."
-  );
-}
+const BCRYPT_ROUNDS = 10;
+const MIN_PASSWORD_LENGTH = 6;
+const MIN_USERNAME_LENGTH = 3;
+const MAX_USERNAME_LENGTH = 30;
+// Username: letters, numbers, underscore, hyphen only
+const USERNAME_REGEX = /^[a-zA-Z0-9_-]+$/;
 
 export const authOptions: NextAuthOptions = {
   providers: [
-    ...(enableGithub
-      ? [
-          GitHubProvider({
-            clientId: process.env.GITHUB_ID!,
-            clientSecret: process.env.GITHUB_SECRET!,
-            // Request user:email scope to get private emails
-            authorization: {
-              params: { scope: "read:user user:email" },
-            },
-          }),
-        ]
-      : []),
+    CredentialsProvider({
+      name: "Account",
+      credentials: {
+        username: {
+          label: "Username",
+          type: "text",
+          placeholder: "your_username",
+        },
+        password: { label: "Password", type: "password" },
+        mode: { label: "Mode", type: "text" }, // "login" | "signup"
+      },
+      async authorize(credentials) {
+        try {
+          console.log("[auth] authorize called with mode:", credentials?.mode, "username:", credentials?.username);
+
+          if (!credentials?.username || !credentials?.password) {
+            throw new Error("Missing username or password");
+          }
+
+          const username = credentials.username.trim();
+          const password = credentials.password;
+          const mode = credentials.mode === "signup" ? "signup" : "login";
+
+          // Validate username format
+          if (username.length < MIN_USERNAME_LENGTH) {
+            throw new Error(
+              `Username must be at least ${MIN_USERNAME_LENGTH} characters`
+            );
+          }
+          if (username.length > MAX_USERNAME_LENGTH) {
+            throw new Error(
+              `Username must be at most ${MAX_USERNAME_LENGTH} characters`
+            );
+          }
+          if (!USERNAME_REGEX.test(username)) {
+            throw new Error(
+              "Username can only contain letters, numbers, underscore, and hyphen"
+            );
+          }
+
+          // Validate password length
+          if (password.length < MIN_PASSWORD_LENGTH) {
+            throw new Error(
+              `Password must be at least ${MIN_PASSWORD_LENGTH} characters`
+            );
+          }
+
+          if (mode === "signup") {
+            // Check if username already taken
+            const existing = await db.user.findUnique({
+              where: { username },
+            });
+            if (existing) {
+              throw new Error("Username already taken");
+            }
+
+            // Create new user
+            const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
+            const user = await db.user.create({
+              data: {
+                username,
+                passwordHash,
+                name: username,
+              },
+            });
+            console.log("[auth] created user:", user.id, user.username);
+
+            // Ensure UserProgress exists
+            const progress = await db.userProgress.findUnique({
+              where: { userId: user.id },
+            });
+            if (!progress) {
+              await db.userProgress.create({
+                data: { userId: user.id, currentTier: "A2" },
+              });
+            }
+
+            return {
+              id: user.id,
+              name: user.name ?? user.username,
+              username: user.username,
+            };
+          }
+
+          // mode === "login"
+          const user = await db.user.findUnique({
+            where: { username },
+          });
+          if (!user) {
+            throw new Error("User not found. Sign up first.");
+          }
+
+          const passwordMatch = await bcrypt.compare(password, user.passwordHash);
+          if (!passwordMatch) {
+            throw new Error("Incorrect password");
+          }
+
+          console.log("[auth] login success:", user.id, user.username);
+          return {
+            id: user.id,
+            name: user.name ?? user.username,
+            username: user.username,
+          };
+        } catch (err) {
+          console.error("[auth] authorize error:", err instanceof Error ? err.message : err);
+          // Returning null → 401 CredentialsSignin
+          // Throwing → also 401 but error swallowed by NextAuth
+          // Either way, the user sees "invalid credentials" message
+          return null;
+        }
+      },
+    }),
   ],
   session: { strategy: "jwt" },
   callbacks: {
-    async jwt({ token, user, account, profile }) {
-      // Initial sign-in: store user id + image
+    async jwt({ token, user }) {
       if (user?.id) {
         token.id = user.id;
       }
-      if (user?.image) {
-        token.image = user.image;
-      }
-      // Store GitHub username for display
-      if (account?.provider === "github" && profile) {
-        const ghProfile = profile as { login?: string; avatar_url?: string };
-        if (ghProfile.login) token.username = ghProfile.login;
-        if (ghProfile.avatar_url && !token.image) {
-          token.image = ghProfile.avatar_url;
-        }
+      // @ts-expect-error — username is custom field
+      if (user?.username) {
+        // @ts-expect-error — username is custom field
+        token.username = user.username;
       }
       return token;
     },
     async session({ session, token }) {
       if (session.user && token.id) {
-        // @ts-expect-error — augment session.user with id
+        // @ts-expect-error — augment session.user with id + username
         session.user.id = token.id as string;
-      }
-      if (session.user && token.image) {
-        session.user.image = token.image as string;
       }
       if (session.user && token.username) {
         // @ts-expect-error — augment session.user with username
@@ -64,67 +152,8 @@ export const authOptions: NextAuthOptions = {
       }
       return session;
     },
-    async signIn({ user, account, profile }) {
-      // For GitHub OAuth: create or update user in Prisma DB
-      if (account?.provider === "github" && user.email) {
-        try {
-          const ghProfile = profile as {
-            login?: string;
-            name?: string | null;
-            avatar_url?: string;
-          };
-
-          // Upsert user by email
-          const existing = await db.user.findUnique({
-            where: { email: user.email },
-          });
-
-          if (!existing) {
-            await db.user.create({
-              data: {
-                email: user.email,
-                name: user.name ?? ghProfile.login ?? null,
-                image: user.image ?? ghProfile.avatar_url ?? null,
-              },
-            });
-          } else {
-            // Update name/image if changed
-            await db.user.update({
-              where: { id: existing.id },
-              data: {
-                name: user.name ?? existing.name,
-                image: user.image ?? existing.image,
-              },
-            });
-          }
-
-          // Ensure UserProgress exists
-          const dbUser = await db.user.findUnique({
-            where: { email: user.email },
-          });
-          if (dbUser) {
-            const progress = await db.userProgress.findUnique({
-              where: { userId: dbUser.id },
-            });
-            if (!progress) {
-              await db.userProgress.create({
-                data: { userId: dbUser.id, currentTier: "A2" },
-              });
-            }
-
-            // Inject the DB user id into the user object so JWT callback can use it
-            user.id = dbUser.id;
-          }
-        } catch (err) {
-          console.error("[auth] Failed to upsert user:", err);
-          return false; // block sign-in on DB error
-        }
-      }
-      return true;
-    },
   },
   pages: {
-    // Use custom sign-in page at root
     signIn: "/",
   },
   secret: process.env.NEXTAUTH_SECRET,
