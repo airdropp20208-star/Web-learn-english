@@ -1,13 +1,15 @@
 // Deck storage helpers — manage subscribed decks + deck progress
-// Stored in localStorage
+// Lưu trong localStorage.
+
+import type { FSRSCardState } from "./types";
 
 export interface DeckSubscription {
   deckId: string;
   subscribedAt: number;
-  // Track which words user has studied (by word index in deck)
-  studiedWords: number[]; // indices into deck.words array
-  // Track FSRS card states per word (keyed by word string)
-  cardStates: Record<string, any>; // word -> FSRS card state
+  /** Vị trí của những từ đã học, trỏ vào mảng deck.words */
+  studiedWords: number[];
+  /** Trạng thái thẻ FSRS theo từng từ: word -> card state */
+  cardStates: Record<string, FSRSCardState>;
 }
 
 export interface DeckProgress {
@@ -18,6 +20,9 @@ export interface DeckProgress {
 }
 
 const SUB_KEY = "deck-subscriptions";
+
+/** Thẻ được coi là “thuộc” khi khoảng ôn tiếp theo từ 21 ngày trở lên. */
+const MASTERED_INTERVAL_DAYS = 21;
 
 function getSubs(): Record<string, DeckSubscription> {
   if (typeof window === "undefined") return {};
@@ -31,7 +36,23 @@ function getSubs(): Record<string, DeckSubscription> {
 
 function setSubs(subs: Record<string, DeckSubscription>): void {
   if (typeof window === "undefined") return;
-  localStorage.setItem(SUB_KEY, JSON.stringify(subs));
+  try {
+    localStorage.setItem(SUB_KEY, JSON.stringify(subs));
+  } catch {
+    // localStorage đầy hoặc bị chặn
+  }
+}
+
+/** Một thẻ đến hạn khi chưa ôn lần nào, hoặc đã qua ngày hẹn. */
+export function isCardStateDue(
+  card: FSRSCardState | undefined,
+  now: number = Date.now()
+): boolean {
+  if (!card) return true;
+  if (!card.reps) return true;
+  const due = new Date(card.due).getTime();
+  if (Number.isNaN(due)) return true;
+  return due <= now;
 }
 
 export async function getSubscribedDecks(): Promise<string[]> {
@@ -61,21 +82,31 @@ export async function unsubscribeFromDeck(deckId: string): Promise<void> {
   setSubs(subs);
 }
 
-export async function getDeckSubscription(deckId: string): Promise<DeckSubscription | null> {
+export async function getDeckSubscription(
+  deckId: string
+): Promise<DeckSubscription | null> {
   return getSubs()[deckId] ?? null;
 }
 
 /**
- * Mark a word as studied + store its FSRS card state.
+ * Đánh dấu một từ đã học + lưu trạng thái thẻ FSRS của nó.
+ * Tự đăng ký deck nếu người dùng học thẳng mà chưa subscribe.
  */
 export async function markWordStudied(
   deckId: string,
   wordIndex: number,
   word: string,
-  cardState: any
+  cardState: FSRSCardState
 ): Promise<void> {
   const subs = getSubs();
-  if (!subs[deckId]) return;
+  if (!subs[deckId]) {
+    subs[deckId] = {
+      deckId,
+      subscribedAt: Date.now(),
+      studiedWords: [],
+      cardStates: {},
+    };
+  }
 
   if (!subs[deckId].studiedWords.includes(wordIndex)) {
     subs[deckId].studiedWords.push(wordIndex);
@@ -85,29 +116,36 @@ export async function markWordStudied(
 }
 
 /**
- * Get list of words in deck that are due for review (FSRS card.due <= now).
+ * Trả về vị trí của những từ đã học và đang đến hạn ôn.
+ * Cần danh sách từ của deck để ánh xạ vị trí sang từ.
  */
-export async function getDueWords(deckId: string): Promise<number[]> {
+export async function getDueWords(
+  deckId: string,
+  words: string[]
+): Promise<number[]> {
   const sub = getSubs()[deckId];
   if (!sub) return [];
 
   const now = Date.now();
   return sub.studiedWords.filter((idx) => {
-    // Get word from deck — but we don't have deck data here, just card states
-    // Caller needs to map idx -> word -> card state
-    return idx; // placeholder, caller will filter
+    const word = words[idx];
+    if (!word) return false;
+    return isCardStateDue(sub.cardStates[word], now);
   });
 }
 
-/**
- * Get all card states for a deck (for review session).
- */
-export async function getDeckCardStates(deckId: string): Promise<Record<string, any>> {
+/** Lấy toàn bộ trạng thái thẻ của một deck. */
+export async function getDeckCardStates(
+  deckId: string
+): Promise<Record<string, FSRSCardState>> {
   return getSubs()[deckId]?.cardStates ?? {};
 }
 
 /**
- * Compute progress for a deck.
+ * Tính tiến độ của một deck.
+ * - studiedWords: số từ đã học ít nhất một lần
+ * - dueWords: số từ đã học và đang đến hạn ôn (không tính từ chưa học)
+ * - masteryPercent: tỷ lệ từ đã nhớ vững trên tổng số từ
  */
 export async function getDeckProgress(
   deckId: string,
@@ -115,36 +153,24 @@ export async function getDeckProgress(
 ): Promise<DeckProgress> {
   const sub = getSubs()[deckId];
   if (!sub) {
-    return {
-      totalWords,
-      studiedWords: 0,
-      dueWords: 0,
-      masteryPercent: 0,
-    };
+    return { totalWords, studiedWords: 0, dueWords: 0, masteryPercent: 0 };
   }
 
-  const studied = sub.studiedWords.length;
   const now = Date.now();
+  const cards = Object.values(sub.cardStates);
+
   let due = 0;
-  for (const word of Object.keys(sub.cardStates)) {
-    const card = sub.cardStates[word];
-    if (card?.due) {
-      try {
-        const dueDate = new Date(card.due).getTime();
-        if (dueDate <= now) due++;
-      } catch {
-        // skip invalid
-      }
-    } else {
-      // New card without due date = due now
-      due++;
-    }
+  let mastered = 0;
+  for (const card of cards) {
+    if (isCardStateDue(card, now)) due++;
+    if (card.scheduled_days >= MASTERED_INTERVAL_DAYS) mastered++;
   }
 
   return {
     totalWords,
-    studiedWords: studied,
+    studiedWords: sub.studiedWords.length,
     dueWords: due,
-    masteryPercent: totalWords > 0 ? Math.round((studied / totalWords) * 100) : 0,
+    masteryPercent:
+      totalWords > 0 ? Math.round((mastered / totalWords) * 100) : 0,
   };
 }
