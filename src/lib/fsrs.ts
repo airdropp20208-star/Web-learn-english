@@ -4,6 +4,7 @@
 import {
   fsrs,
   generatorParameters,
+  createEmptyCard,
   Rating,
   type Card,
   type RecordLogItem,
@@ -25,8 +26,8 @@ export interface FSRSState {
  * Create a new FSRS card (for first-time vocabulary).
  */
 export function createNewCard(): Card {
-  // ts-fsrs createEmpty returns a card with due=now, reps=0, state=New
-  return f.createEmptyCard(new Date()) as Card;
+  // createEmptyCard is a standalone export from ts-fsrs
+  return createEmptyCard(new Date()) as Card;
 }
 
 /**
