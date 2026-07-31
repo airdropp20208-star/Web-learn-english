@@ -25,8 +25,8 @@ import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import { ListChecks, CheckCircle2, XCircle, RotateCcw, AlertCircle } from "lucide-react";
 import type { QuizResponse, TextDTO, VocabItemDTO, QuizType } from "@/lib/types";
-import { getTexts, getVocabItems, saveQuizQuestions, getMemoryItems, updateMemoryAfterReview } from "@/lib/storage";
-import { computeUpdatedHalfLife } from "@/lib/mastery-engine";
+import { getTexts, getVocabItems, saveQuizQuestions, getMemoryItems, reviewMemoryItem } from "@/lib/storage";
+import type { ReviewRating } from "@/lib/fsrs";
 
 interface QuizTabProps {
   userId: string;
@@ -164,12 +164,9 @@ export function QuizTab({ userId }: QuizTabProps) {
       if (relatedMemoryId) {
         const memItem = memoryItems.find((m) => m.id === relatedMemoryId);
         if (memItem) {
-          const newHalfLife = computeUpdatedHalfLife(memItem, correct, latency);
-          await updateMemoryAfterReview(relatedMemoryId, {
-            correct,
-            latencyMs: latency,
-            newHalfLife,
-          });
+          // FSRS: Again (2) if wrong, Good (4) if correct
+          const rating: ReviewRating = correct ? 4 : 2;
+          await reviewMemoryItem(relatedMemoryId, rating);
         }
       }
     }

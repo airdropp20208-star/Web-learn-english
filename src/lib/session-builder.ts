@@ -1,29 +1,35 @@
-// Session Builder — picks due items + interleaves for variety
+// Session Builder — uses FSRS card state (due date) instead of half-life
 
 import type { MemoryItemDTO, QuizType } from "./types";
-import { estimateRecallProbability } from "./mastery-engine";
 
 export interface ReviewSessionItem {
   item: MemoryItemDTO;
-  recallProb: number;
   chosenFormat: QuizType;
 }
 
 /**
- * Build a review session: filter due items, sort by urgency, cap size, interleave.
+ * Build a review session: filter due cards, sort by due date (oldest first).
+ * FSRS cards have a `due` field — if due <= now, it's due for review.
  */
 export function buildReviewSession(
   allItems: MemoryItemDTO[],
-  maxSize: number = 18,
-  now: number = Date.now()
+  maxSize: number = 18
 ): ReviewSessionItem[] {
+  const now = Date.now();
+
   const due = allItems
-    .map((item) => ({
-      item,
-      recallProb: estimateRecallProbability(item, now),
-    }))
-    .filter((x) => x.recallProb < 0.85) // REVIEW_THRESHOLD
-    .sort((a, b) => a.recallProb - b.recallProb) // urgent first
+    .filter((item) => {
+      // New cards (reps=0) are always due
+      if (item.card.reps === 0) return true;
+      // Review cards: due if due date <= now
+      return new Date(item.card.due).getTime() <= now;
+    })
+    .sort((a, b) => {
+      // Sort: new cards first (reps=0), then by due date ascending
+      if (a.card.reps === 0 && b.card.reps !== 0) return -1;
+      if (a.card.reps !== 0 && b.card.reps === 0) return 1;
+      return new Date(a.card.due).getTime() - new Date(b.card.due).getTime();
+    })
     .slice(0, maxSize);
 
   return interleave(due);
@@ -44,9 +50,8 @@ function interleave<T extends { item: MemoryItemDTO }>(
   let lastTextId: string | null = null;
 
   while (remaining.length > 0) {
-    // Find first item with different sourceTextId
     let nextIdx = remaining.findIndex((x) => x.item.sourceTextId !== lastTextId);
-    if (nextIdx === -1) nextIdx = 0; // fallback if all same
+    if (nextIdx === -1) nextIdx = 0;
 
     const next = remaining.splice(nextIdx, 1)[0];
     const chosenFormat = formats[Math.floor(Math.random() * formats.length)];

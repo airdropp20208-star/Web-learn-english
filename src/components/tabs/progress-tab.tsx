@@ -79,7 +79,7 @@ export function ProgressTab({ userId }: ProgressTabProps) {
       const avgRecall =
         itemsInTier.length > 0
           ? itemsInTier.reduce(
-              (sum, i) => sum + estimateRecallProbability(i),
+              (sum, i) => sum + (i.card.last_review ? estimateRecallProbability({ stability: i.card.stability, lastReview: i.card.last_review }) : 0),
               0
             ) / itemsInTier.length
           : 0;

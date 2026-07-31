@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Progress } from "@/components/ui/progress";
-import { NotebookPen, Search } from "lucide-react";
+import { NotebookPen, Search, Volume2 } from "lucide-react";
 import type { VocabItemDTO, MemoryItemDTO, CEFRLevel } from "@/lib/types";
 import { getVocabItems, getMemoryItems } from "@/lib/storage";
 import { estimateRecallProbability } from "@/lib/mastery-engine";
@@ -67,7 +67,13 @@ export function VocabTab({ userId }: VocabTabProps) {
       .map((v) => {
         const m = memoryMap.get(v.memoryItemId);
         if (!m) return null;
-        const recall = estimateRecallProbability(m);
+        // FSRS: estimate retention from card stability + last review
+        const recall = m.card.last_review
+          ? estimateRecallProbability({
+              stability: m.card.stability,
+              lastReview: m.card.last_review,
+            })
+          : 0;
         return { vocab: v, memory: m, recallProb: recall };
       })
       .filter((x): x is { vocab: VocabItemDTO; memory: MemoryItemDTO; recallProb: number } => x !== null);
@@ -139,6 +145,20 @@ export function VocabTab({ userId }: VocabTabProps) {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
                         <span className="font-semibold">{vocab.word}</span>
+                        {vocab.ipa && (
+                          <span className="text-xs text-muted-foreground font-mono ml-1">
+                            {vocab.ipa}
+                          </span>
+                        )}
+                        {vocab.audioUrl && (
+                          <button
+                            onClick={() => new Audio(vocab.audioUrl).play()}
+                            className="ml-1 text-muted-foreground hover:text-primary"
+                            title="Play pronunciation"
+                          >
+                            <Volume2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                         <Badge
                           variant="outline"
                           className={CEFR_COLOR[vocab.cefrLevel]}
@@ -156,8 +176,10 @@ export function VocabTab({ userId }: VocabTabProps) {
                         "{vocab.contextSentence}"
                       </p>
                       <div className="text-xs text-muted-foreground mt-1">
-                        Reviewed {memory.correctHistory.length}× · Last:{" "}
-                        {new Date(memory.lastReviewedAt).toLocaleDateString()}
+                        Reviewed {memory.card.reps}× · Last:{" "}
+                        {memory.card.last_review
+                          ? new Date(memory.card.last_review).toLocaleDateString()
+                          : "never"}
                       </div>
                     </div>
                     <div className="text-right shrink-0 w-24">

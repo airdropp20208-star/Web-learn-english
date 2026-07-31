@@ -1,6 +1,5 @@
-// Storage helpers — localStorage-based (no database needed)
-// All functions use localStorage for persistence
-// Works entirely client-side
+// Storage helpers — localStorage-based with FSRS card state
+// Updated to use ts-fsrs for spaced repetition scheduling
 
 import type {
   MemoryItemDTO,
@@ -12,7 +11,15 @@ import type {
   CEFRLevel,
   ItemType,
   QuizType,
+  FSRSCardState,
 } from "./types";
+import {
+  createNewCard,
+  reviewCard,
+  serializeCard,
+  deserializeCard,
+  type ReviewRating,
+} from "./fsrs";
 
 // ============ localStorage helpers ============
 
@@ -42,7 +49,7 @@ function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
 }
 
-// ============ Conversions (raw → DTO) ============
+// ============ Conversions ============
 
 function toTextDTO(raw: any): TextDTO {
   return {
@@ -52,6 +59,7 @@ function toTextDTO(raw: any): TextDTO {
     content: raw.content,
     cefrLevel: raw.cefrLevel as CEFRLevel,
     summary: raw.summary,
+    readability: raw.readability ?? null,
     createdAt: raw.createdAt,
     updatedAt: raw.updatedAt,
   };
@@ -66,6 +74,8 @@ function toVocabItemDTO(raw: any): VocabItemDTO {
     exampleSentence: raw.exampleSentence,
     contextSentence: raw.contextSentence,
     cefrLevel: raw.cefrLevel as CEFRLevel,
+    ipa: raw.ipa ?? null,
+    audioUrl: raw.audioUrl ?? null,
     sourceTextId: raw.sourceTextId,
     memoryItemId: raw.memoryItemId,
     createdAt: raw.createdAt,
@@ -80,13 +90,15 @@ function toMemoryItemDTO(raw: any): MemoryItemDTO {
     itemType: raw.itemType as ItemType,
     refText: raw.refText,
     cefrLevel: raw.cefrLevel as CEFRLevel,
-    halfLifeDays: raw.halfLifeDays,
-    lastReviewedAt: raw.lastReviewedAt,
-    correctHistory: raw.correctHistory ?? [],
-    latencyHistory: raw.latencyHistory ?? [],
+    card: raw.card ?? defaultCardState(),
     createdAt: raw.createdAt,
     updatedAt: raw.updatedAt,
   };
+}
+
+function defaultCardState(): FSRSCardState {
+  const card = createNewCard();
+  return JSON.parse(serializeCard(card));
 }
 
 function toQuizQuestionDTO(raw: any): QuizQuestionDTO {
@@ -98,7 +110,7 @@ function toQuizQuestionDTO(raw: any): QuizQuestionDTO {
     question: raw.question,
     options: raw.options ?? [],
     correctAnswer: raw.correctAnswer,
-    relatedMemoryItemId: raw.relatedMemoryItemId,
+    relatedMemoryItemId: raw.relatedMemoryItemId ?? null,
     createdAt: raw.createdAt,
   };
 }
@@ -129,7 +141,13 @@ function toShadowSessionDTO(raw: any): ShadowSessionDTO {
 
 export async function createText(
   userId: string,
-  data: { title: string; content: string; cefrLevel: CEFRLevel; summary?: string }
+  data: {
+    title: string;
+    content: string;
+    cefrLevel: CEFRLevel;
+    summary?: string;
+    readability?: TextDTO["readability"];
+  }
 ): Promise<TextDTO> {
   const key = `texts:${userId}`;
   const texts = getStore<any>(key);
@@ -141,6 +159,7 @@ export async function createText(
     content: data.content,
     cefrLevel: data.cefrLevel,
     summary: data.summary ?? null,
+    readability: data.readability ?? null,
     createdAt: now,
     updatedAt: now,
   };
@@ -161,7 +180,7 @@ export async function getText(userId: string, textId: string): Promise<TextDTO |
   return text ? toTextDTO(text) : null;
 }
 
-// ============ Vocab + Memory Items ============
+// ============ Vocab + Memory Items (FSRS) ============
 
 export async function saveVocabItem(
   userId: string,
@@ -171,13 +190,18 @@ export async function saveVocabItem(
     exampleSentence: string;
     contextSentence: string;
     cefrLevel: CEFRLevel;
+    ipa?: string | null;
+    audioUrl?: string | null;
     sourceTextId: string;
   }
 ): Promise<{ vocabItem: VocabItemDTO; memoryItem: MemoryItemDTO }> {
   const now = Date.now();
   const memoryId = generateId();
 
-  // Create memory item
+  // Create FSRS card (new card, due immediately)
+  const cardState = defaultCardState();
+
+  // Create memory item with FSRS card state
   const memKey = `memory:${userId}`;
   const memories = getStore<any>(memKey);
   const memoryItem = {
@@ -187,10 +211,7 @@ export async function saveVocabItem(
     itemType: "word",
     refText: data.contextSentence,
     cefrLevel: data.cefrLevel,
-    halfLifeDays: 1.0,
-    lastReviewedAt: now,
-    correctHistory: [],
-    latencyHistory: [],
+    card: cardState,
     createdAt: now,
     updatedAt: now,
   };
@@ -208,6 +229,8 @@ export async function saveVocabItem(
     exampleSentence: data.exampleSentence,
     contextSentence: data.contextSentence,
     cefrLevel: data.cefrLevel,
+    ipa: data.ipa ?? null,
+    audioUrl: data.audioUrl ?? null,
     sourceTextId: data.sourceTextId,
     memoryItemId: memoryId,
     createdAt: now,
@@ -231,26 +254,26 @@ export async function getMemoryItems(userId: string): Promise<MemoryItemDTO[]> {
   return getStore<any>(key).map(toMemoryItemDTO);
 }
 
-export async function updateMemoryAfterReview(
+/**
+ * Review a memory item using FSRS.
+ * Takes a rating (Again/Hard/Good/Easy), updates the FSRS card state.
+ */
+export async function reviewMemoryItem(
   memoryItemId: string,
-  data: { correct: boolean; latencyMs: number; newHalfLife: number }
+  rating: ReviewRating
 ): Promise<MemoryItemDTO | null> {
-  // Search across all users' memory items
   const keys = Object.keys(localStorage).filter((k) => k.startsWith("memory:"));
   for (const key of keys) {
     const memories = getStore<any>(key);
     const idx = memories.findIndex((m: any) => m.id === memoryItemId);
     if (idx !== -1) {
       const item = memories[idx];
-      const correctHistory: boolean[] = item.correctHistory ?? [];
-      const latencyHistory: number[] = item.latencyHistory ?? [];
-      correctHistory.push(data.correct);
-      latencyHistory.push(data.latencyMs);
+      // Deserialize current card, review it, serialize back
+      const card = deserializeCard(JSON.stringify(item.card));
+      const { card: updatedCard } = reviewCard(card, rating);
+      const newCardState = JSON.parse(serializeCard(updatedCard));
 
-      item.halfLifeDays = data.newHalfLife;
-      item.lastReviewedAt = Date.now();
-      item.correctHistory = correctHistory;
-      item.latencyHistory = latencyHistory;
+      item.card = newCardState;
       item.updatedAt = Date.now();
 
       memories[idx] = item;

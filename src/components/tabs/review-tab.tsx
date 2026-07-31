@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Card,
   CardContent,
@@ -14,38 +13,42 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
-import { Brain, CheckCircle2, XCircle, Play, RotateCcw } from "lucide-react";
+import { Brain, CheckCircle2, RotateCcw, Play, Volume2 } from "lucide-react";
 import type { MemoryItemDTO, VocabItemDTO, QuizType } from "@/lib/types";
-import {
-  getMemoryItems,
-  getVocabItems,
-  updateMemoryAfterReview,
-} from "@/lib/storage";
-import {
-  buildReviewSession,
-  type ReviewSessionItem,
-} from "@/lib/session-builder";
-import { computeUpdatedHalfLife, estimateRecallProbability } from "@/lib/mastery-engine";
+import { getMemoryItems, getVocabItems, reviewMemoryItem } from "@/lib/storage";
+import { buildReviewSession, type ReviewSessionItem } from "@/lib/session-builder";
+import { previewSchedule, formatInterval, type ReviewRating } from "@/lib/fsrs";
+import { estimateRecallProbability } from "@/lib/mastery-engine";
 
 interface ReviewTabProps {
   userId: string;
 }
+
+const RATING_BUTTONS: Array<{
+  rating: ReviewRating;
+  label: string;
+  color: string;
+  key: string;
+}> = [
+  { rating: 2, label: "Again", color: "bg-red-500 hover:bg-red-600 text-white", key: "1" },
+  { rating: 3, label: "Hard", color: "bg-orange-500 hover:bg-orange-600 text-white", key: "2" },
+  { rating: 4, label: "Good", color: "bg-green-500 hover:bg-green-600 text-white", key: "3" },
+  { rating: 5, label: "Easy", color: "bg-blue-500 hover:bg-blue-600 text-white", key: "4" },
+];
 
 export function ReviewTab({ userId }: ReviewTabProps) {
   const [loading, setLoading] = useState(true);
   const [session, setSession] = useState<ReviewSessionItem[]>([]);
   const [currentIdx, setCurrentIdx] = useState(0);
   const [answer, setAnswer] = useState("");
-  const [submitted, setSubmitted] = useState(false);
-  const [lastCorrect, setLastCorrect] = useState<boolean | null>(null);
-  const [questionStart, setQuestionStart] = useState<number>(Date.now());
+  const [showAnswer, setShowAnswer] = useState(false);
   const [completed, setCompleted] = useState(false);
-  const [results, setResults] = useState<{ correct: number; total: number }>({
-    correct: 0,
-    total: 0,
+  const [results, setResults] = useState<{ reviewed: number; again: number }>({
+    reviewed: 0,
+    again: 0,
   });
+  const [vocabs, setVocabs] = useState<VocabItemDTO[]>([]);
 
   async function loadSession() {
     setLoading(true);
@@ -53,33 +56,51 @@ export function ReviewTab({ userId }: ReviewTabProps) {
       getMemoryItems(userId),
       getVocabItems(userId),
     ]);
+    setVocabs(vocabItems);
     const sess = buildReviewSession(memItems, 18);
     setSession(sess);
     setCurrentIdx(0);
     setAnswer("");
-    setSubmitted(false);
-    setLastCorrect(null);
+    setShowAnswer(false);
     setCompleted(false);
-    setResults({ correct: 0, total: 0 });
-    if (sess.length > 0) setQuestionStart(Date.now());
+    setResults({ reviewed: 0, again: 0 });
     setLoading(false);
   }
 
   useEffect(() => {
-    loadSession();
-     
+    let cancelled = false;
+    (async () => {
+      const [memItems, vocabItems] = await Promise.all([
+        getMemoryItems(userId),
+        getVocabItems(userId),
+      ]);
+      if (cancelled) return;
+      setVocabs(vocabItems);
+      const sess = buildReviewSession(memItems, 18);
+      setSession(sess);
+      setCurrentIdx(0);
+      setAnswer("");
+      setShowAnswer(false);
+      setCompleted(false);
+      setResults({ reviewed: 0, again: 0 });
+      setLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [userId]);
 
-  function getVocabForItem(item: MemoryItemDTO, vocabs: VocabItemDTO[]) {
+  function getVocabForItem(item: MemoryItemDTO): VocabItemDTO | undefined {
     return vocabs.find((v) => v.memoryItemId === item.id);
   }
 
-  function renderQuestion(item: ReviewSessionItem, vocabs: VocabItemDTO[]) {
-    const v = getVocabForItem(item.item, vocabs);
+  function renderQuestion(item: ReviewSessionItem) {
+    const v = getVocabForItem(item.item);
+    if (!v) return <p className="text-sm text-muted-foreground">No vocab linked.</p>;
+
     const format: QuizType = item.chosenFormat;
 
-    if (format === "mcq" && v) {
-      // Build options: correct + 3 distractors from other vocab
+    if (format === "mcq") {
       const distractors = vocabs
         .filter((x) => x.id !== v?.id)
         .sort(() => Math.random() - 0.5)
@@ -91,39 +112,48 @@ export function ReviewTab({ userId }: ReviewTabProps) {
           <p className="text-sm">
             What does <strong className="text-primary">{v.word}</strong> mean?
           </p>
+          {v.ipa && (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span className="font-mono">{v.ipa}</span>
+              {v.audioUrl && (
+                <button
+                  onClick={() => new Audio(v.audioUrl).play()}
+                  className="hover:text-primary"
+                >
+                  <Volume2 className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          )}
           <div className="text-xs text-muted-foreground border-l-2 pl-2 italic mb-2">
             "{v.contextSentence}"
           </div>
-          <div className="space-y-2">
-            {options.map((opt, i) => {
-              const isSelected = answer === opt;
-              const showCorrect = submitted && opt === v.definition;
-              const showWrong = submitted && isSelected && opt !== v.definition;
-              return (
+          {showAnswer ? (
+            <div className="bg-emerald-50 dark:bg-emerald-950 p-3 rounded-md text-sm">
+              <strong>Answer:</strong> {v.definition}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {options.map((opt, i) => (
                 <button
                   key={i}
-                  disabled={submitted}
                   onClick={() => setAnswer(opt)}
                   className={`w-full text-left px-3 py-2 rounded-md border text-sm transition-colors ${
-                    showCorrect
-                      ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-950"
-                      : showWrong
-                      ? "border-rose-500 bg-rose-50 dark:bg-rose-950"
-                      : isSelected
+                    answer === opt
                       ? "border-primary bg-primary/5"
                       : "hover:bg-accent"
                   }`}
                 >
                   {opt}
                 </button>
-              );
-            })}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       );
     }
 
-    if (format === "cloze" && v) {
+    if (format === "cloze") {
       const clozeSentence = v.contextSentence.replace(
         new RegExp(v.word, "i"),
         "_____"
@@ -132,87 +162,81 @@ export function ReviewTab({ userId }: ReviewTabProps) {
         <div className="space-y-3">
           <p className="text-sm">Fill in the blank:</p>
           <div className="border-l-2 pl-3 py-1 italic">{clozeSentence}</div>
-          <Input
-            value={answer}
-            onChange={(e) => setAnswer(e.target.value)}
-            disabled={submitted}
-            placeholder="Type the missing word…"
-          />
+          {showAnswer ? (
+            <div className="bg-emerald-50 dark:bg-emerald-950 p-3 rounded-md text-sm">
+              <strong>Answer:</strong> {v.word}
+              {v.ipa && <span className="ml-2 font-mono text-xs">{v.ipa}</span>}
+            </div>
+          ) : (
+            <Input
+              value={answer}
+              onChange={(e) => setAnswer(e.target.value)}
+              placeholder="Type the missing word…"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") setShowAnswer(true);
+              }}
+            />
+          )}
         </div>
       );
     }
 
     // recall
-    if (v) {
-      return (
-        <div className="space-y-3">
-          <p className="text-sm">
-            Write the word that matches this definition:
-          </p>
-          <div className="bg-accent p-3 rounded-md text-sm">
-            {v.definition}
+    return (
+      <div className="space-y-3">
+        <p className="text-sm">Write the word that matches this definition:</p>
+        <div className="bg-accent p-3 rounded-md text-sm">{v.definition}</div>
+        {showAnswer ? (
+          <div className="bg-emerald-50 dark:bg-emerald-950 p-3 rounded-md text-sm">
+            <strong>Answer:</strong> {v.word}
+            {v.ipa && <span className="ml-2 font-mono text-xs">{v.ipa}</span>}
+            {v.audioUrl && (
+              <button
+                onClick={() => new Audio(v.audioUrl).play()}
+                className="ml-2 hover:text-primary"
+              >
+                <Volume2 className="w-3.5 h-3.5 inline" />
+              </button>
+            )}
           </div>
+        ) : (
           <Input
             value={answer}
             onChange={(e) => setAnswer(e.target.value)}
-            disabled={submitted}
             placeholder="Type the word…"
+            onKeyDown={(e) => {
+              if (e.key === "Enter") setShowAnswer(true);
+            }}
           />
-        </div>
-      );
-    }
-
-    return <p className="text-sm text-muted-foreground">No vocab item linked.</p>;
+        )}
+      </div>
+    );
   }
 
-  async function handleSubmitAnswer(vocabs: VocabItemDTO[]) {
+  async function handleReview(rating: ReviewRating) {
     if (!session[currentIdx]) return;
     const item = session[currentIdx];
-    const v = getVocabForItem(item.item, vocabs);
-    if (!v) {
-      toast.error("No vocab linked to this item, skipping");
-      nextQuestion();
-      return;
-    }
 
-    const userAns = answer.trim().toLowerCase();
-    const correct =
-      userAns === v.word.toLowerCase() ||
-      userAns === v.definition.trim().toLowerCase();
-    const latency = Date.now() - questionStart;
-    setLastCorrect(correct);
-    setSubmitted(true);
+    await reviewMemoryItem(item.item.id, rating);
+
     setResults((prev) => ({
-      correct: prev.correct + (correct ? 1 : 0),
-      total: prev.total + 1,
+      reviewed: prev.reviewed + 1,
+      again: prev.again + (rating === 2 ? 1 : 0),
     }));
 
-    // Update memory model
-    const newHalfLife = computeUpdatedHalfLife(item.item, correct, latency);
-    await updateMemoryAfterReview(item.item.id, {
-      correct,
-      latencyMs: latency,
-      newHalfLife,
-    });
-
-    if (correct) {
-      toast.success("Correct! Memory strengthened.");
-    } else {
-      toast.error(`Wrong. Correct: "${v.word}"`);
+    if (rating === 2) {
+      toast.info("Marked as Again — will review soon.");
     }
-  }
 
-  function nextQuestion() {
+    // Next question
     if (currentIdx + 1 >= session.length) {
       setCompleted(true);
-      toast.success(`Review session complete!`);
+      toast.success("Review session complete!");
       return;
     }
     setCurrentIdx((i) => i + 1);
     setAnswer("");
-    setSubmitted(false);
-    setLastCorrect(null);
-    setQuestionStart(Date.now());
+    setShowAnswer(false);
   }
 
   if (loading) {
@@ -229,11 +253,9 @@ export function ReviewTab({ userId }: ReviewTabProps) {
       <Card>
         <CardContent className="p-6 text-center space-y-3">
           <Brain className="w-10 h-10 mx-auto text-muted-foreground" />
-          <p className="text-muted-foreground">
-            No items due for review right now.
-          </p>
+          <p className="text-muted-foreground">No items due for review right now.</p>
           <p className="text-xs text-muted-foreground">
-            Save some vocabulary from the Read tab, then come back here later when memory decays.
+            Save vocabulary from the Read tab, then come back when cards are due.
           </p>
           <Button onClick={loadSession} variant="outline">
             <RotateCcw className="w-4 h-4 mr-1.5" />
@@ -250,20 +272,19 @@ export function ReviewTab({ userId }: ReviewTabProps) {
         <CardHeader>
           <CardTitle>Session complete</CardTitle>
           <CardDescription>
-            You reviewed {results.total} items.
+            You reviewed {results.reviewed} cards.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="text-center py-4">
-            <div className="text-3xl font-bold">
-              {results.correct}/{results.total}
-            </div>
-            <p className="text-sm text-muted-foreground mt-1">correct</p>
+            <div className="text-3xl font-bold">{results.reviewed}</div>
+            <p className="text-sm text-muted-foreground mt-1">cards reviewed</p>
+            {results.again > 0 && (
+              <p className="text-xs text-orange-600 mt-2">
+                {results.again} marked "Again" (will review soon)
+              </p>
+            )}
           </div>
-          <Progress
-            value={results.total > 0 ? (results.correct / results.total) * 100 : 0}
-            className="h-2"
-          />
           <Button onClick={loadSession} className="w-full">
             <Play className="w-4 h-4 mr-1.5" />
             Start new session
@@ -275,54 +296,7 @@ export function ReviewTab({ userId }: ReviewTabProps) {
 
   const currentItem = session[currentIdx];
   const progress = (currentIdx / session.length) * 100;
-
-  return (
-    <ReviewContent
-      session={session}
-      currentIdx={currentIdx}
-      progress={progress}
-      userId={userId}
-      renderQuestion={renderQuestion}
-      onSubmit={handleSubmitAnswer}
-      onNext={nextQuestion}
-      answer={answer}
-      submitted={submitted}
-      lastCorrect={lastCorrect}
-    />
-  );
-}
-
-function ReviewContent({
-  session,
-  currentIdx,
-  progress,
-  userId,
-  renderQuestion,
-  onSubmit,
-  onNext,
-  answer,
-  submitted,
-  lastCorrect,
-}: {
-  session: ReviewSessionItem[];
-  currentIdx: number;
-  progress: number;
-  userId: string;
-  answer: string;
-  submitted: boolean;
-  lastCorrect: boolean | null;
-  renderQuestion: (item: ReviewSessionItem, vocabs: VocabItemDTO[]) => React.ReactNode;
-  onSubmit: (vocabs: VocabItemDTO[]) => Promise<void>;
-  onNext: () => void;
-}) {
-  const [vocabs, setVocabs] = useState<VocabItemDTO[]>([]);
-
-  useEffect(() => {
-    getVocabItems(userId).then(setVocabs);
-  }, [userId]);
-
-  const currentItem = session[currentIdx];
-  const recallProb = estimateRecallProbability(currentItem.item);
+  const preview = previewSchedule(currentItem.item.card);
 
   return (
     <div className="space-y-4">
@@ -330,9 +304,11 @@ function ReviewContent({
         <CardContent className="p-4 space-y-2">
           <div className="flex items-center justify-between text-sm">
             <span>
-              Question {currentIdx + 1} of {session.length}
+              Card {currentIdx + 1} of {session.length}
             </span>
-            <Badge variant="outline">Recall: {(recallProb * 100).toFixed(0)}%</Badge>
+            <Badge variant="outline">
+              {currentItem.chosenFormat}
+            </Badge>
           </div>
           <Progress value={progress} className="h-2" />
         </CardContent>
@@ -344,37 +320,42 @@ function ReviewContent({
             <Brain className="w-4 h-4" />
             Review
           </CardTitle>
-          <CardDescription>
-            Format: <Badge variant="secondary">{currentItem.chosenFormat}</Badge>
-          </CardDescription>
         </CardHeader>
         <CardContent>
-          {renderQuestion(currentItem, vocabs)}
+          {renderQuestion(currentItem)}
 
-          {submitted && lastCorrect !== null && (
-            <div className="mt-4 flex items-center gap-2 text-sm">
-              {lastCorrect ? (
-                <CheckCircle2 className="w-5 h-5 text-emerald-600" />
-              ) : (
-                <XCircle className="w-5 h-5 text-rose-600" />
-              )}
-              <span>
-                {lastCorrect ? "Correct!" : "Wrong."} Memory model updated.
-              </span>
+          {!showAnswer ? (
+            <Button
+              onClick={() => setShowAnswer(true)}
+              className="w-full mt-4"
+              size="lg"
+            >
+              Show answer
+            </Button>
+          ) : (
+            <div className="mt-4 space-y-2">
+              <p className="text-xs text-center text-muted-foreground mb-2">
+                How well did you remember?
+              </p>
+              <div className="grid grid-cols-4 gap-2">
+                {RATING_BUTTONS.map((btn) => (
+                  <button
+                    key={btn.rating}
+                    onClick={() => handleReview(btn.rating)}
+                    className={`px-3 py-3 rounded-md text-sm font-medium transition-colors ${btn.color}`}
+                  >
+                    <div>{btn.label}</div>
+                    <div className="text-xs opacity-80 mt-0.5">
+                      {formatInterval(preview[btn.label.toLowerCase() as "again" | "hard" | "good" | "easy"].intervalDays)}
+                    </div>
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-center text-muted-foreground mt-2">
+                Press 1-4 to select, or click buttons above
+              </p>
             </div>
           )}
-
-          <div className="mt-4 flex gap-2">
-            {!submitted ? (
-              <Button onClick={() => onSubmit(vocabs)} disabled={!answer.trim()}>
-                Submit answer
-              </Button>
-            ) : (
-              <Button onClick={onNext}>
-                {currentIdx + 1 >= session.length ? "Finish" : "Next question"}
-              </Button>
-            )}
-          </div>
         </CardContent>
       </Card>
     </div>

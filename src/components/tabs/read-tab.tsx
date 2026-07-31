@@ -16,7 +16,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
-import { Sparkles, Save, FileText, AlertCircle } from "lucide-react";
+import { Sparkles, Save, FileText, AlertCircle, Volume2 } from "lucide-react";
 import type { AnalyzeResponse, CEFRLevel, TextDTO, VocabItemDTO } from "@/lib/types";
 import { createText, saveVocabItem, getTexts } from "@/lib/storage";
 
@@ -119,6 +119,8 @@ export function ReadTab({ userId }: ReadTabProps) {
         exampleSentence: word.example,
         contextSentence: word.contextSentence,
         cefrLevel: word.cefrLevel,
+        ipa: (word as any).ipa ?? null,
+        audioUrl: (word as any).audioUrl ?? null,
         sourceTextId: savedText.id,
       });
       setSavedVocabIds((prev) => new Set(prev).add(word.word));
@@ -158,7 +160,23 @@ export function ReadTab({ userId }: ReadTabProps) {
               <div className="flex items-center justify-between">
                 <div>
                   <div className="font-semibold">{w.word}</div>
-                  <Badge variant="outline" className={CEFR_COLOR[w.cefrLevel]}>
+                  {(w as any).ipa && (
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className="text-xs text-muted-foreground font-mono">
+                        {(w as any).ipa}
+                      </span>
+                      {(w as any).audioUrl && (
+                        <button
+                          onClick={() => new Audio((w as any).audioUrl).play()}
+                          className="text-muted-foreground hover:text-primary"
+                          title="Play pronunciation"
+                        >
+                          <Volume2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  )}
+                  <Badge variant="outline" className={`mt-1 ${CEFR_COLOR[w.cefrLevel]}`}>
                     {w.cefrLevel}
                   </Badge>
                 </div>
@@ -166,10 +184,14 @@ export function ReadTab({ userId }: ReadTabProps) {
                   <Badge variant="secondary">Saved</Badge>
                 )}
               </div>
-              <p className="text-sm">{w.definition}</p>
-              <div className="text-xs text-muted-foreground">
-                <span className="font-medium">Example:</span> {w.example}
-              </div>
+              {w.definition && (
+                <p className="text-sm">{w.definition}</p>
+              )}
+              {w.example && (
+                <div className="text-xs text-muted-foreground">
+                  <span className="font-medium">Example:</span> {w.example}
+                </div>
+              )}
               <div className="text-xs text-muted-foreground border-l-2 pl-2 italic">
                 "{w.contextSentence}"
               </div>

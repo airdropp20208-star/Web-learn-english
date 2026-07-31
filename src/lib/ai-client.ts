@@ -237,6 +237,40 @@ export async function analyzeText(content: string): Promise<AnalyzeResponse> {
   };
 }
 
+// ============ Public: generate summary (title + summary + CEFR) ============
+// This is the ONLY Gemini call in the analyze flow — reduces Gemini usage by 80%
+// Definitions, IPA, audio come from dictionary service; CEFR spine from static dataset
+
+const SUMMARY_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    title: { type: Type.STRING, description: "Short title (max 80 chars) summarizing the text" },
+    cefrLevel: {
+      type: Type.STRING,
+      enum: ["A1", "A2", "B1", "B2", "C1", "C2"],
+      description: "Estimated CEFR difficulty level",
+    },
+    summary: { type: Type.STRING, description: "1-2 sentence summary of the text" },
+  },
+  required: ["title", "cefrLevel", "summary"],
+};
+
+export async function generateSummary(
+  content: string
+): Promise<{ title: string; cefrLevel: CEFRLevel; summary: string }> {
+  const prompt = `Read the following English text and provide:\n1. A short title (max 80 characters)\n2. The estimated CEFR level (A1-C2)\n3. A 1-2 sentence summary\n\nText:\n"""\n${content}\n"""`;
+
+  const raw = await callGemini({
+    prompt,
+    systemInstruction:
+      "You are an English language teacher. Provide concise titles and summaries. Always respond in valid JSON matching the requested schema.",
+    responseMimeType: "application/json",
+    responseSchema: SUMMARY_SCHEMA,
+  });
+
+  return JSON.parse(raw);
+}
+
 // ============ Public: generate quiz ============
 
 const QUIZ_SCHEMA = {

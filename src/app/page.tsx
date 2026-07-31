@@ -11,6 +11,7 @@ import {
   ListChecks,
   TrendingUp,
   NotebookPen,
+  Library,
 } from "lucide-react";
 import { UserMenu } from "@/components/user-menu";
 import { ReadTab } from "@/components/tabs/read-tab";
@@ -19,9 +20,10 @@ import { ReviewTab } from "@/components/tabs/review-tab";
 import { VocabTab } from "@/components/tabs/vocab-tab";
 import { ProgressTab } from "@/components/tabs/progress-tab";
 import { ShadowTab } from "@/components/tabs/shadow-tab";
+import { LibraryTab } from "@/components/tabs/library-tab";
 import { DEFAULT_USER_ID } from "@/lib/auth";
 
-type TabId = "read" | "quiz" | "review" | "vocab" | "progress" | "shadow";
+type TabId = "library" | "read" | "quiz" | "review" | "vocab" | "progress" | "shadow";
 
 interface TabDef {
   id: TabId;
@@ -31,10 +33,11 @@ interface TabDef {
 }
 
 const TABS: TabDef[] = [
+  { id: "library", label: "Library", icon: Library, description: "Browse graded reading texts by CEFR level (A1-C2)" },
   { id: "read", label: "Read", icon: BookOpen, description: "Paste a text and learn vocabulary in context" },
   { id: "quiz", label: "Quiz", icon: ListChecks, description: "Test your comprehension with mixed-format questions" },
-  { id: "review", label: "Review", icon: Brain, description: "Spaced repetition session based on your memory" },
-  { id: "vocab", label: "Vocab", icon: NotebookPen, description: "Your saved words and their memory strength" },
+  { id: "review", label: "Review", icon: Brain, description: "FSRS spaced repetition — review due cards" },
+  { id: "vocab", label: "Vocab", icon: NotebookPen, description: "Your saved words with IPA, audio, and memory strength" },
   { id: "progress", label: "Progress", icon: TrendingUp, description: "Current tier and mastery level" },
   { id: "shadow", label: "Shadow", icon: Headphones, description: "Listen and shadow the audio of texts you read" },
 ];
@@ -62,7 +65,7 @@ function HomeContent() {
 
   const initialTab = (() => {
     const tab = searchParams.get("tab") as TabId | null;
-    return tab && TABS.some((t) => t.id === tab) ? tab : "read";
+    return tab && TABS.some((t) => t.id === tab) ? tab : "library";
   })();
   const [activeTab, setActiveTab] = useState<TabId>(initialTab);
 
@@ -143,6 +146,7 @@ function HomeContent() {
             <p className="text-sm text-muted-foreground">{active.description}</p>
           </div>
 
+          {activeTab === "library" && <LibraryTab userId={userId} />}
           {activeTab === "read" && <ReadTab userId={userId} />}
           {activeTab === "quiz" && <QuizTab userId={userId} />}
           {activeTab === "review" && <ReviewTab userId={userId} />}

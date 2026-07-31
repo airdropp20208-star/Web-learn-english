@@ -1,19 +1,11 @@
-// Mastery Gate — check tier advancement conditions
+// Mastery Gate — check tier advancement using FSRS retention estimate
 
 import type { MemoryItemDTO, CEFRLevel } from "./types";
-import {
-  estimateRecallProbability,
-  CEFR_ORDER,
-  TIER_THRESHOLD,
-  MIN_SAMPLE_SIZE,
-} from "./mastery-engine";
+import { CEFR_ORDER, TIER_THRESHOLD, MIN_SAMPLE_SIZE } from "./mastery-engine";
+import { estimateRecallProbability } from "./mastery-engine";
 
 /**
  * Check if user is ready to advance to next CEFR tier.
- * Conditions:
- * 1. Enough items in current tier (MIN_SAMPLE_SIZE)
- * 2. Average recall probability >= TIER_THRESHOLD
- * 3. Not at C2 already
  */
 export function checkTierAdvancement(
   items: MemoryItemDTO[],
@@ -24,7 +16,6 @@ export function checkTierAdvancement(
   const nextTier: CEFRLevel | null =
     nextTierIdx < CEFR_ORDER.length ? CEFR_ORDER[nextTierIdx] : null;
 
-  // Filter items in current tier (cefrLevel === currentTier)
   const active = items.filter((i) => i.cefrLevel === currentTier);
 
   if (active.length < MIN_SAMPLE_SIZE) {
@@ -37,8 +28,17 @@ export function checkTierAdvancement(
   }
 
   const avgP =
-    active.reduce((sum, i) => sum + estimateRecallProbability(i, now), 0) /
-    active.length;
+    active.reduce((sum, i) => {
+      // For FSRS cards, estimate retention from stability + time since last review
+      if (i.card.last_review) {
+        return sum + estimateRecallProbability({
+          stability: i.card.stability,
+          lastReview: i.card.last_review,
+        });
+      }
+      // New cards (never reviewed) have 0 retention
+      return sum;
+    }, 0) / active.length;
 
   return {
     canAdvance: avgP >= TIER_THRESHOLD && nextTier !== null,
@@ -49,7 +49,7 @@ export function checkTierAdvancement(
 }
 
 /**
- * Compute current tier mastery score (avg recall prob of items in current tier).
+ * Compute current tier mastery score.
  */
 export function computeTierMasteryScore(
   items: MemoryItemDTO[],
@@ -59,7 +59,14 @@ export function computeTierMasteryScore(
   const active = items.filter((i) => i.cefrLevel === currentTier);
   if (active.length === 0) return 0;
   return (
-    active.reduce((sum, i) => sum + estimateRecallProbability(i, now), 0) /
-    active.length
+    active.reduce((sum, i) => {
+      if (i.card.last_review) {
+        return sum + estimateRecallProbability({
+          stability: i.card.stability,
+          lastReview: i.card.last_review,
+        });
+      }
+      return sum;
+    }, 0) / active.length
   );
 }
