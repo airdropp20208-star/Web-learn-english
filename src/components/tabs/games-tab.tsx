@@ -7,6 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { Gamepad2, Check, X, Clock, Trophy, RotateCcw } from "lucide-react";
+import { award } from "@/lib/gamification";
+import { getGameComment } from "@/lib/humor";
 
 interface GamesTabProps {
   userId: string;
@@ -224,6 +226,12 @@ function MatchGame({ deck, onExit }: { deck: Deck; onExit: () => void }) {
       setRound((r) => r + 1);
       if (round + 1 >= 3) {
         setGameOver(true);
+        // Award gamification — game-win
+        const { newAchievements } = award("game-win");
+        toast.success(getGameComment(true), { duration: 3000 });
+        newAchievements.forEach((a) => {
+          toast.success(`🏅 ${a.name}: ${a.description}`, { duration: 5000 });
+        });
       } else {
         setTimeout(generateRound, 1000);
       }

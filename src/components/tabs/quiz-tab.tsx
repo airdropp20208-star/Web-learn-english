@@ -27,6 +27,8 @@ import { ListChecks, CheckCircle2, XCircle, RotateCcw, AlertCircle } from "lucid
 import type { QuizResponse, TextDTO, VocabItemDTO, QuizType } from "@/lib/types";
 import { getTexts, getVocabItems, saveQuizQuestions, getMemoryItems, reviewMemoryItem } from "@/lib/storage";
 import type { ReviewRating } from "@/lib/fsrs";
+import { award } from "@/lib/gamification";
+import { getReviewComment } from "@/lib/humor";
 
 interface QuizTabProps {
   userId: string;
@@ -176,8 +178,20 @@ export function QuizTab({ userId }: QuizTabProps) {
         (answers[i] ?? "").trim().toLowerCase() ===
         q.correctAnswer.trim().toLowerCase()
     ).length;
+
+    // Award gamification for review
+    const { newAchievements } = award("review-word", correctCount);
+    if (correctCount > 0) {
+      toast.success(getReviewComment(true), { duration: 3000 });
+    } else {
+      toast.info(getReviewComment(false), { duration: 3000 });
+    }
+    newAchievements.forEach((a) => {
+      toast.success(`🏅 ${a.name}: ${a.description}`, { duration: 5000 });
+    });
+
     toast.success(
-      `Quiz submitted — ${correctCount}/${questions.length} correct. Memory updated.`
+      `Quiz xong — ${correctCount}/${questions.length} đúng. +${correctCount * 15} XP +${correctCount * 8} coins!`
     );
   }
 

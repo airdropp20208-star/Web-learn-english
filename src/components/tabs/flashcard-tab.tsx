@@ -14,6 +14,8 @@ import {
   RefreshCw,
   AlertCircle,
 } from "lucide-react";
+import { award } from "@/lib/gamification";
+import { getLearnComment } from "@/lib/humor";
 
 interface FlashcardTabProps {
   userId: string;
@@ -161,6 +163,16 @@ export function FlashcardTab({ userId, initialDeckId }: FlashcardTabProps) {
       }
       await markWordStudied(selectedDeck.id, currentIdx, currentWord.word, cardState);
       setStudiedCount((c) => c + 1);
+
+      // Award gamification
+      const { newAchievements } = award("learn-word");
+      if (studiedCount % 3 === 0) {
+        // Show humor comment every 3 words
+        toast.success(getLearnComment(), { duration: 3000 });
+      }
+      newAchievements.forEach((a) => {
+        toast.success(`🏅 ${a.name}: ${a.description}`, { duration: 5000 });
+      });
     } catch (e) {
       console.error("[flashcard] Failed to mark studied:", e);
     }

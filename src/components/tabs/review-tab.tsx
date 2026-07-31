@@ -20,6 +20,8 @@ import { getMemoryItems, getVocabItems, reviewMemoryItem } from "@/lib/storage";
 import { buildReviewSession, type ReviewSessionItem } from "@/lib/session-builder";
 import { previewSchedule, formatInterval, type ReviewRating } from "@/lib/fsrs";
 import { estimateRecallProbability } from "@/lib/mastery-engine";
+import { award } from "@/lib/gamification";
+import { getReviewComment } from "@/lib/humor";
 
 interface ReviewTabProps {
   userId: string;
@@ -224,8 +226,16 @@ export function ReviewTab({ userId }: ReviewTabProps) {
       again: prev.again + (rating === 2 ? 1 : 0),
     }));
 
+    // Award gamification — review-word gives XP + coins
+    const correct = rating !== 2; // "Again" = wrong
+    const { newAchievements } = award("review-word");
+    toast.success(getReviewComment(correct), { duration: 2500 });
+    newAchievements.forEach((a) => {
+      toast.success(`🏅 ${a.name}: ${a.description}`, { duration: 5000 });
+    });
+
     if (rating === 2) {
-      toast.info("Marked as Again — will review soon.");
+      toast.info("Sẽ ôn lại sớm", { duration: 2000 });
     }
 
     // Next question

@@ -1,73 +1,52 @@
 "use client";
 
-import { useState, Suspense } from "react";
+import { useState, Suspense, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  BookOpen,
-  Brain,
-  Headphones,
-  ListChecks,
-  TrendingUp,
-  NotebookPen,
-  Library,
+  Home,
   Layers,
+  BookOpen,
+  Library,
   Gamepad2,
-  Home as HomeIcon,
+  User,
+  Coins,
+  Flame,
+  ArrowLeft,
 } from "lucide-react";
-import { UserMenu } from "@/components/user-menu";
-import { ReadTab } from "@/components/tabs/read-tab";
-import { QuizTab } from "@/components/tabs/quiz-tab";
-import { ReviewTab } from "@/components/tabs/review-tab";
-import { VocabTab } from "@/components/tabs/vocab-tab";
-import { ProgressTab } from "@/components/tabs/progress-tab";
-import { ShadowTab } from "@/components/tabs/shadow-tab";
-import { LibraryTab } from "@/components/tabs/library-tab";
+import { HomeTab } from "@/components/tabs/home-tab";
 import { DecksTab } from "@/components/tabs/decks-tab";
-import { FlashcardTab } from "@/components/tabs/flashcard-tab";
+import { StudyTab } from "@/components/tabs/study-tab";
+import { LibraryTab } from "@/components/tabs/library-tab";
 import { GamesTab } from "@/components/tabs/games-tab";
+import { ProfileTab } from "@/components/tabs/profile-tab";
 import { LandingPage } from "@/components/landing-page";
 import { DEFAULT_USER_ID } from "@/lib/auth";
+import { getState } from "@/lib/gamification";
 
-type TabId =
-  | "decks"
-  | "flashcard"
-  | "games"
-  | "library"
-  | "read"
-  | "quiz"
-  | "review"
-  | "vocab"
-  | "progress"
-  | "shadow";
+type TabId = "home" | "decks" | "study" | "library" | "games" | "profile";
 
 interface TabDef {
   id: TabId;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
-  description: string;
 }
 
 const TABS: TabDef[] = [
-  { id: "decks", label: "Decks", icon: Layers, description: "Browse + subscribe vocabulary decks (TOEIC, Oxford, IELTS, Daily)" },
-  { id: "flashcard", label: "Flashcard", icon: BookOpen, description: "Study flashcards with IPA, audio, definitions" },
-  { id: "games", label: "Games", icon: Gamepad2, description: "Mini-games: Match Words + Spelling Bee" },
-  { id: "review", label: "Review", icon: Brain, description: "FSRS spaced repetition — review due cards" },
-  { id: "vocab", label: "Vocab", icon: NotebookPen, description: "Your saved words with IPA, audio, memory strength" },
-  { id: "library", label: "Library", icon: Library, description: "Browse graded reading texts by CEFR level (A1-C2)" },
-  { id: "read", label: "Read", icon: BookOpen, description: "Paste a text and learn vocabulary in context" },
-  { id: "quiz", label: "Quiz", icon: ListChecks, description: "Test your comprehension with mixed-format questions" },
-  { id: "progress", label: "Progress", icon: TrendingUp, description: "Current tier and mastery level" },
-  { id: "shadow", label: "Shadow", icon: Headphones, description: "Listen and shadow the audio of texts you read" },
+  { id: "home", label: "Trang chủ", icon: Home },
+  { id: "decks", label: "Bộ từ", icon: Layers },
+  { id: "study", label: "Học", icon: BookOpen },
+  { id: "library", label: "Thư viện", icon: Library },
+  { id: "games", label: "Game", icon: Gamepad2 },
+  { id: "profile", label: "Hồ sơ", icon: User },
 ];
 
 const userId = DEFAULT_USER_ID;
 
-export default function Home() {
+export default function Page() {
   return (
     <Suspense fallback={<LoadingScreen />}>
-      <HomeContent />
+      <PageContent />
     </Suspense>
   );
 }
@@ -80,20 +59,26 @@ function LoadingScreen() {
   );
 }
 
-function HomeContent() {
+function PageContent() {
   const searchParams = useSearchParams();
   const [showLanding, setShowLanding] = useState(true);
-  const [activeTab, setActiveTab] = useState<TabId>("decks");
+  const [activeTab, setActiveTab] = useState<TabId>("home");
+  const [studyMode, setStudyMode] = useState<"flashcard" | "review" | "quiz" | "read">("flashcard");
   const [initialDeckId, setInitialDeckId] = useState<string | undefined>(undefined);
+  const [gamificationState, setGamificationState] = useState(getState());
 
-  // Auto-show app if ?app=1 in URL (e.g., after clicking CTA)
   const initialApp = searchParams.get("app") === "1";
   if (initialApp && showLanding) {
     setShowLanding(false);
   }
 
-  const handleStart = () => setShowLanding(false);
-  const handleHome = () => setShowLanding(true);
+  // Refresh gamification state every 5s (for live coin/streak updates)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setGamificationState(getState());
+    }, 5000);
+    return () => clearInterval(interval);
+  }, []);
 
   function handleNavigate(tab: string, deckId?: string) {
     setActiveTab(tab as TabId);
@@ -101,118 +86,112 @@ function HomeContent() {
     setShowLanding(false);
   }
 
-  if (showLanding) {
-    return <LandingPage onStart={handleStart} />;
+  function handleStudyNavigate(mode: "flashcard" | "review" | "quiz" | "read") {
+    setStudyMode(mode);
+    setActiveTab("study");
+    setShowLanding(false);
   }
 
-  const active = TABS.find((t) => t.id === activeTab)!;
+  if (showLanding) {
+    return <LandingPage onStart={() => setShowLanding(false)} />;
+  }
 
   return (
-    <div className="min-h-screen flex flex-col bg-background">
-      <header className="border-b bg-card sticky top-0 z-40">
-        <div className="flex items-center justify-between px-4 py-3 max-w-7xl mx-auto w-full">
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleHome}
-              className="flex items-center gap-2 hover:opacity-80"
-            >
-              <div className="w-8 h-8 rounded-md bg-primary flex items-center justify-center text-primary-foreground font-bold">
-                L
-              </div>
-              <h1 className="text-lg font-semibold">Learn English</h1>
-            </button>
-            <span className="text-xs text-muted-foreground hidden sm:inline">
-              Vocabulary · FSRS · Games
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleHome}
-              className="hidden sm:flex"
-            >
-              <HomeIcon className="w-4 h-4" />
-            </Button>
-            <UserMenu />
+    <div className="min-h-screen bg-background flex flex-col">
+      {/* Top header — gamification stats */}
+      <header className="sticky top-0 z-40 border-b bg-card/95 backdrop-blur">
+        <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
+          <button
+            onClick={() => setShowLanding(true)}
+            className="flex items-center gap-2 hover:opacity-80"
+          >
+            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-primary-foreground font-bold text-sm">
+              L
+            </div>
+            <span className="font-semibold hidden sm:inline">Learn English</span>
+          </button>
+
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-100 dark:bg-amber-950/50">
+              <Coins className="w-4 h-4 text-amber-600" />
+              <span className="text-sm font-semibold text-amber-700 dark:text-amber-400">
+                {gamificationState.coins}
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-orange-100 dark:bg-orange-950/50">
+              <Flame className="w-4 h-4 text-orange-600" />
+              <span className="text-sm font-semibold text-orange-700 dark:text-orange-400">
+                {gamificationState.streak}
+              </span>
+            </div>
           </div>
         </div>
       </header>
 
-      <div className="flex-1 flex flex-col md:flex-row max-w-7xl mx-auto w-full">
-        {/* Desktop sidebar */}
-        <aside className="hidden md:flex w-56 shrink-0 border-r bg-card flex-col p-3 gap-1 overflow-y-auto">
+      {/* Main content */}
+      <main className="flex-1 max-w-5xl w-full mx-auto px-4 py-5 pb-24 md:pb-5">
+        {activeTab === "home" && <HomeTab onNavigate={(t) => handleNavigate(t)} />}
+        {activeTab === "decks" && (
+          <DecksTab userId={userId} onNavigate={(t, did) => handleNavigate(t, did)} />
+        )}
+        {activeTab === "study" && (
+          <StudyTab
+            userId={userId}
+            initialMode={studyMode}
+            initialDeckId={initialDeckId}
+            onNavigate={handleStudyNavigate}
+          />
+        )}
+        {activeTab === "library" && <LibraryTab userId={userId} />}
+        {activeTab === "games" && <GamesTab userId={userId} />}
+        {activeTab === "profile" && <ProfileTab userId={userId} />}
+      </main>
+
+      {/* Bottom nav (mobile) */}
+      <nav className="fixed bottom-0 left-0 right-0 z-40 border-t bg-card/95 backdrop-blur md:hidden">
+        <div className="grid grid-cols-6 max-w-5xl mx-auto">
           {TABS.map((tab) => {
             const Icon = tab.icon;
-            const isActive = tab.id === activeTab;
+            const isActive = activeTab === tab.id;
             return (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors text-left ${
+                className={`flex flex-col items-center gap-0.5 py-2.5 transition-colors ${
                   isActive
-                    ? "bg-primary text-primary-foreground"
-                    : "hover:bg-accent hover:text-accent-foreground"
+                    ? "text-primary"
+                    : "text-muted-foreground hover:text-foreground"
                 }`}
               >
-                <Icon className="w-4 h-4 shrink-0" />
-                <span>{tab.label}</span>
+                <Icon className="w-5 h-5" />
+                <span className="text-[10px] font-medium">{tab.label}</span>
               </button>
             );
           })}
-        </aside>
-
-        {/* Mobile tab bar */}
-        <div className="md:hidden border-b bg-card overflow-x-auto shrink-0">
-          <div className="flex gap-1 px-2 py-2 w-max">
-            {TABS.map((tab) => {
-              const Icon = tab.icon;
-              const isActive = tab.id === activeTab;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs whitespace-nowrap shrink-0 ${
-                    isActive
-                      ? "bg-primary text-primary-foreground"
-                      : "hover:bg-accent"
-                  }`}
-                >
-                  <Icon className="w-3.5 h-3.5" />
-                  {tab.label}
-                </button>
-              );
-            })}
-          </div>
         </div>
+      </nav>
 
-        <main className="flex-1 min-w-0 w-full p-4 sm:p-6">
-          <div className="mb-4">
-            <h2 className="text-xl font-semibold flex items-center gap-2">
-              <active.icon className="w-5 h-5" />
-              {active.label}
-            </h2>
-            <p className="text-sm text-muted-foreground">{active.description}</p>
-          </div>
-
-          {activeTab === "decks" && <DecksTab userId={userId} onNavigate={handleNavigate} />}
-          {activeTab === "flashcard" && <FlashcardTab userId={userId} initialDeckId={initialDeckId} />}
-          {activeTab === "games" && <GamesTab userId={userId} />}
-          {activeTab === "library" && <LibraryTab userId={userId} />}
-          {activeTab === "read" && <ReadTab userId={userId} />}
-          {activeTab === "quiz" && <QuizTab userId={userId} />}
-          {activeTab === "review" && <ReviewTab userId={userId} />}
-          {activeTab === "vocab" && <VocabTab userId={userId} />}
-          {activeTab === "progress" && <ProgressTab userId={userId} />}
-          {activeTab === "shadow" && <ShadowTab userId={userId} />}
-        </main>
-      </div>
-
-      <footer className="border-t bg-card mt-auto">
-        <div className="px-4 py-3 text-xs text-muted-foreground text-center max-w-7xl mx-auto">
-          Learn English · FSRS Spaced Repetition · Free Dictionary API · Gemini AI
-        </div>
-      </footer>
+      {/* Sidebar (desktop) */}
+      <aside className="hidden md:flex fixed left-0 top-0 bottom-0 w-56 border-r bg-card flex-col p-3 pt-20 z-30">
+        {TABS.map((tab) => {
+          const Icon = tab.icon;
+          const isActive = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors text-left mb-1 ${
+                isActive
+                  ? "bg-primary text-primary-foreground"
+                  : "hover:bg-accent hover:text-accent-foreground"
+              }`}
+            >
+              <Icon className="w-4 h-4 shrink-0" />
+              <span>{tab.label}</span>
+            </button>
+          );
+        })}
+      </aside>
     </div>
   );
 }
