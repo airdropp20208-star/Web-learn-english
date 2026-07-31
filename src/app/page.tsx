@@ -87,7 +87,8 @@ function HomeContent() {
         </div>
       </header>
 
-      <div className="flex-1 flex max-w-7xl mx-auto w-full">
+      <div className="flex-1 flex flex-col md:flex-row max-w-7xl mx-auto w-full">
+        {/* Desktop sidebar */}
         <aside className="hidden md:flex w-56 shrink-0 border-r bg-card flex-col p-3 gap-1">
           {TABS.map((tab) => {
             const Icon = tab.icon;
@@ -109,8 +110,9 @@ function HomeContent() {
           })}
         </aside>
 
+        {/* Mobile tab bar (horizontal scroll) */}
         <div className="md:hidden border-b bg-card overflow-x-auto shrink-0">
-          <div className="flex gap-1 px-2 py-2 min-w-max">
+          <div className="flex gap-1 px-2 py-2 w-max">
             {TABS.map((tab) => {
               const Icon = tab.icon;
               const isActive = tab.id === activeTab;
@@ -118,7 +120,7 @@ function HomeContent() {
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs whitespace-nowrap ${
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs whitespace-nowrap shrink-0 ${
                     isActive
                       ? "bg-primary text-primary-foreground"
                       : "hover:bg-accent"
