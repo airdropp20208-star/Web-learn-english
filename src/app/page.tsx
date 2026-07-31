@@ -12,7 +12,6 @@ import {
   User,
   Coins,
   Flame,
-  ArrowLeft,
 } from "lucide-react";
 import { HomeTab } from "@/components/tabs/home-tab";
 import { DecksTab } from "@/components/tabs/decks-tab";
@@ -22,9 +21,11 @@ import { GamesTab } from "@/components/tabs/games-tab";
 import { ProfileTab } from "@/components/tabs/profile-tab";
 import { LandingPage } from "@/components/landing-page";
 import { DEFAULT_USER_ID } from "@/lib/auth";
-import { getState } from "@/lib/gamification";
+import { getState, type GamificationState } from "@/lib/gamification";
 
 type TabId = "home" | "decks" | "study" | "library" | "games" | "profile";
+
+type StudyModeId = "flashcard" | "review" | "quiz" | "read";
 
 interface TabDef {
   id: TabId;
@@ -63,30 +64,42 @@ function PageContent() {
   const searchParams = useSearchParams();
   const [showLanding, setShowLanding] = useState(true);
   const [activeTab, setActiveTab] = useState<TabId>("home");
-  const [studyMode, setStudyMode] = useState<"flashcard" | "review" | "quiz" | "read">("flashcard");
+  const [studyMode, setStudyMode] = useState<StudyModeId>("flashcard");
   const [initialDeckId, setInitialDeckId] = useState<string | undefined>(undefined);
-  const [gamificationState, setGamificationState] = useState(getState());
+  // null until hydrated from localStorage (client-only) — avoids SSR mismatch
+  const [gamificationState, setGamificationState] = useState<GamificationState | null>(null);
 
-  const initialApp = searchParams.get("app") === "1";
-  if (initialApp && showLanding) {
-    setShowLanding(false);
-  }
-
-  // Refresh gamification state every 5s (for live coin/streak updates)
+  // Deep link: ?app=1 skips the landing page.
+  // setState runs inside an effect, never during render.
   useEffect(() => {
-    const interval = setInterval(() => {
-      setGamificationState(getState());
-    }, 5000);
+    if (searchParams.get("app") === "1") {
+      setShowLanding(false);
+    }
+  }, [searchParams]);
+
+  // Hydrate gamification state after mount, then refresh every 5s
+  // (for live coin/streak updates)
+  useEffect(() => {
+    const update = () => setGamificationState(getState());
+    update();
+    const interval = setInterval(update, 5000);
     return () => clearInterval(interval);
   }, []);
 
   function handleNavigate(tab: string, deckId?: string) {
-    setActiveTab(tab as TabId);
+    // Support deep links into Study sub-modes:
+    // "study:flashcard" | "study:review" | "study:quiz" | "study:read"
+    if (tab.startsWith("study:")) {
+      setStudyMode(tab.slice(6) as StudyModeId);
+      setActiveTab("study");
+    } else {
+      setActiveTab(tab as TabId);
+    }
     if (deckId) setInitialDeckId(deckId);
     setShowLanding(false);
   }
 
-  function handleStudyNavigate(mode: "flashcard" | "review" | "quiz" | "read") {
+  function handleStudyNavigate(mode: StudyModeId) {
     setStudyMode(mode);
     setActiveTab("study");
     setShowLanding(false);
@@ -115,13 +128,13 @@ function PageContent() {
             <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-100 dark:bg-amber-950/50">
               <Coins className="w-4 h-4 text-amber-600" />
               <span className="text-sm font-semibold text-amber-700 dark:text-amber-400">
-                {gamificationState.coins}
+                {gamificationState?.coins ?? 0}
               </span>
             </div>
             <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-orange-100 dark:bg-orange-950/50">
               <Flame className="w-4 h-4 text-orange-600" />
               <span className="text-sm font-semibold text-orange-700 dark:text-orange-400">
-                {gamificationState.streak}
+                {gamificationState?.streak ?? 0}
               </span>
             </div>
           </div>
