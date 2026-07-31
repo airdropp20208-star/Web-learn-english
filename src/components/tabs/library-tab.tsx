@@ -75,8 +75,12 @@ export function LibraryTab({ userId }: LibraryTabProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: text.content }),
       });
-      if (!res.ok) throw new Error("Analyze failed");
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `Analyze failed (${res.status})`);
+      }
       const data: AnalyzeResponse = await res.json();
+      console.log("[library] Analyze result:", data.highlightedWords?.length, "words");
 
       // Save text to user's library
       const savedText = await createText(userId, {
@@ -86,25 +90,34 @@ export function LibraryTab({ userId }: LibraryTabProps) {
         summary: data.summary,
         readability: data.readability,
       });
+      console.log("[library] Saved text:", savedText.id);
 
       // Auto-save all highlighted words as vocab
+      let savedCount = 0;
       for (const word of data.highlightedWords) {
-        await saveVocabItem(userId, {
-          word: word.word,
-          definition: word.definition,
-          exampleSentence: word.example,
-          contextSentence: word.contextSentence,
-          cefrLevel: word.cefrLevel,
-          ipa: word.ipa,
-          audioUrl: word.audioUrl,
-          sourceTextId: savedText.id,
-        });
+        try {
+          await saveVocabItem(userId, {
+            word: word.word,
+            definition: word.definition,
+            exampleSentence: word.example,
+            contextSentence: word.contextSentence,
+            cefrLevel: word.cefrLevel,
+            ipa: word.ipa,
+            audioUrl: word.audioUrl,
+            sourceTextId: savedText.id,
+          });
+          savedCount++;
+        } catch (e) {
+          console.error("[library] Failed to save vocab word:", word.word, e);
+        }
       }
+      console.log("[library] Saved", savedCount, "vocab words");
 
-      toast.success(`Imported "${text.title}" with ${data.highlightedWords.length} vocabulary words`);
+      toast.success(`Imported "${text.title}" with ${savedCount} vocabulary words`);
       setSelectedText(null);
     } catch (err) {
-      toast.error("Failed to analyze and import text");
+      console.error("[library] Import failed:", err);
+      toast.error(`Failed to import: ${err instanceof Error ? err.message : "unknown error"}`);
     } finally {
       setAnalyzing(false);
     }

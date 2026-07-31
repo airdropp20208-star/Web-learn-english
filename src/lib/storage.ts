@@ -97,8 +97,25 @@ function toMemoryItemDTO(raw: any): MemoryItemDTO {
 }
 
 function defaultCardState(): FSRSCardState {
-  const card = createNewCard();
-  return JSON.parse(serializeCard(card));
+  try {
+    const card = createNewCard();
+    return JSON.parse(serializeCard(card));
+  } catch (err) {
+    // Fallback if ts-fsrs fails in browser (rare, but defensive)
+    console.warn("[storage] FSRS card creation failed, using fallback:", err);
+    const now = new Date().toISOString();
+    return {
+      due: now,
+      stability: 0,
+      difficulty: 0,
+      elapsed_days: 0,
+      scheduled_days: 0,
+      reps: 0,
+      lapses: 0,
+      state: 0,
+      last_review: null,
+    };
+  }
 }
 
 function toQuizQuestionDTO(raw: any): QuizQuestionDTO {
@@ -198,50 +215,55 @@ export async function saveVocabItem(
   const now = Date.now();
   const memoryId = generateId();
 
-  // Create FSRS card (new card, due immediately)
+  // Create FSRS card (with fallback if ts-fsrs fails in browser)
   const cardState = defaultCardState();
 
-  // Create memory item with FSRS card state
-  const memKey = `memory:${userId}`;
-  const memories = getStore<any>(memKey);
-  const memoryItem = {
-    id: memoryId,
-    userId,
-    sourceTextId: data.sourceTextId,
-    itemType: "word",
-    refText: data.contextSentence,
-    cefrLevel: data.cefrLevel,
-    card: cardState,
-    createdAt: now,
-    updatedAt: now,
-  };
-  memories.push(memoryItem);
-  setStore(memKey, memories);
+  try {
+    // Create memory item with FSRS card state
+    const memKey = `memory:${userId}`;
+    const memories = getStore<any>(memKey);
+    const memoryItem = {
+      id: memoryId,
+      userId,
+      sourceTextId: data.sourceTextId,
+      itemType: "word",
+      refText: data.contextSentence,
+      cefrLevel: data.cefrLevel,
+      card: cardState,
+      createdAt: now,
+      updatedAt: now,
+    };
+    memories.push(memoryItem);
+    setStore(memKey, memories);
 
-  // Create vocab item
-  const vocabKey = `vocab:${userId}`;
-  const vocabs = getStore<any>(vocabKey);
-  const vocabItem = {
-    id: generateId(),
-    userId,
-    word: data.word,
-    definition: data.definition,
-    exampleSentence: data.exampleSentence,
-    contextSentence: data.contextSentence,
-    cefrLevel: data.cefrLevel,
-    ipa: data.ipa ?? null,
-    audioUrl: data.audioUrl ?? null,
-    sourceTextId: data.sourceTextId,
-    memoryItemId: memoryId,
-    createdAt: now,
-  };
-  vocabs.push(vocabItem);
-  setStore(vocabKey, vocabs);
+    // Create vocab item
+    const vocabKey = `vocab:${userId}`;
+    const vocabs = getStore<any>(vocabKey);
+    const vocabItem = {
+      id: generateId(),
+      userId,
+      word: data.word,
+      definition: data.definition,
+      exampleSentence: data.exampleSentence,
+      contextSentence: data.contextSentence,
+      cefrLevel: data.cefrLevel,
+      ipa: data.ipa ?? null,
+      audioUrl: data.audioUrl ?? null,
+      sourceTextId: data.sourceTextId,
+      memoryItemId: memoryId,
+      createdAt: now,
+    };
+    vocabs.push(vocabItem);
+    setStore(vocabKey, vocabs);
 
-  return {
-    vocabItem: toVocabItemDTO(vocabItem),
-    memoryItem: toMemoryItemDTO(memoryItem),
-  };
+    return {
+      vocabItem: toVocabItemDTO(vocabItem),
+      memoryItem: toMemoryItemDTO(memoryItem),
+    };
+  } catch (err) {
+    console.error("[storage] saveVocabItem failed:", err);
+    throw err;
+  }
 }
 
 export async function getVocabItems(userId: string): Promise<VocabItemDTO[]> {
