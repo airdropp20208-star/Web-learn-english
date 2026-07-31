@@ -12,6 +12,9 @@ import {
   TrendingUp,
   NotebookPen,
   Library,
+  Layers,
+  Gamepad2,
+  Home as HomeIcon,
 } from "lucide-react";
 import { UserMenu } from "@/components/user-menu";
 import { ReadTab } from "@/components/tabs/read-tab";
@@ -21,9 +24,23 @@ import { VocabTab } from "@/components/tabs/vocab-tab";
 import { ProgressTab } from "@/components/tabs/progress-tab";
 import { ShadowTab } from "@/components/tabs/shadow-tab";
 import { LibraryTab } from "@/components/tabs/library-tab";
+import { DecksTab } from "@/components/tabs/decks-tab";
+import { FlashcardTab } from "@/components/tabs/flashcard-tab";
+import { GamesTab } from "@/components/tabs/games-tab";
+import { LandingPage } from "@/components/landing-page";
 import { DEFAULT_USER_ID } from "@/lib/auth";
 
-type TabId = "library" | "read" | "quiz" | "review" | "vocab" | "progress" | "shadow";
+type TabId =
+  | "decks"
+  | "flashcard"
+  | "games"
+  | "library"
+  | "read"
+  | "quiz"
+  | "review"
+  | "vocab"
+  | "progress"
+  | "shadow";
 
 interface TabDef {
   id: TabId;
@@ -33,11 +50,14 @@ interface TabDef {
 }
 
 const TABS: TabDef[] = [
+  { id: "decks", label: "Decks", icon: Layers, description: "Browse + subscribe vocabulary decks (TOEIC, Oxford, IELTS, Daily)" },
+  { id: "flashcard", label: "Flashcard", icon: BookOpen, description: "Study flashcards with IPA, audio, definitions" },
+  { id: "games", label: "Games", icon: Gamepad2, description: "Mini-games: Match Words + Spelling Bee" },
+  { id: "review", label: "Review", icon: Brain, description: "FSRS spaced repetition — review due cards" },
+  { id: "vocab", label: "Vocab", icon: NotebookPen, description: "Your saved words with IPA, audio, memory strength" },
   { id: "library", label: "Library", icon: Library, description: "Browse graded reading texts by CEFR level (A1-C2)" },
   { id: "read", label: "Read", icon: BookOpen, description: "Paste a text and learn vocabulary in context" },
   { id: "quiz", label: "Quiz", icon: ListChecks, description: "Test your comprehension with mixed-format questions" },
-  { id: "review", label: "Review", icon: Brain, description: "FSRS spaced repetition — review due cards" },
-  { id: "vocab", label: "Vocab", icon: NotebookPen, description: "Your saved words with IPA, audio, and memory strength" },
   { id: "progress", label: "Progress", icon: TrendingUp, description: "Current tier and mastery level" },
   { id: "shadow", label: "Shadow", icon: Headphones, description: "Listen and shadow the audio of texts you read" },
 ];
@@ -62,12 +82,28 @@ function LoadingScreen() {
 
 function HomeContent() {
   const searchParams = useSearchParams();
+  const [showLanding, setShowLanding] = useState(true);
+  const [activeTab, setActiveTab] = useState<TabId>("decks");
+  const [initialDeckId, setInitialDeckId] = useState<string | undefined>(undefined);
 
-  const initialTab = (() => {
-    const tab = searchParams.get("tab") as TabId | null;
-    return tab && TABS.some((t) => t.id === tab) ? tab : "library";
-  })();
-  const [activeTab, setActiveTab] = useState<TabId>(initialTab);
+  // Auto-show app if ?app=1 in URL (e.g., after clicking CTA)
+  const initialApp = searchParams.get("app") === "1";
+  if (initialApp && showLanding) {
+    setShowLanding(false);
+  }
+
+  const handleStart = () => setShowLanding(false);
+  const handleHome = () => setShowLanding(true);
+
+  function handleNavigate(tab: string, deckId?: string) {
+    setActiveTab(tab as TabId);
+    if (deckId) setInitialDeckId(deckId);
+    setShowLanding(false);
+  }
+
+  if (showLanding) {
+    return <LandingPage onStart={handleStart} />;
+  }
 
   const active = TABS.find((t) => t.id === activeTab)!;
 
@@ -76,15 +112,28 @@ function HomeContent() {
       <header className="border-b bg-card sticky top-0 z-40">
         <div className="flex items-center justify-between px-4 py-3 max-w-7xl mx-auto w-full">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-md bg-primary flex items-center justify-center text-primary-foreground font-bold">
-              L
-            </div>
-            <h1 className="text-lg font-semibold">Learn English</h1>
+            <button
+              onClick={handleHome}
+              className="flex items-center gap-2 hover:opacity-80"
+            >
+              <div className="w-8 h-8 rounded-md bg-primary flex items-center justify-center text-primary-foreground font-bold">
+                L
+              </div>
+              <h1 className="text-lg font-semibold">Learn English</h1>
+            </button>
             <span className="text-xs text-muted-foreground hidden sm:inline">
-              Reading · Quiz · Shadowing
+              Vocabulary · FSRS · Games
             </span>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleHome}
+              className="hidden sm:flex"
+            >
+              <HomeIcon className="w-4 h-4" />
+            </Button>
             <UserMenu />
           </div>
         </div>
@@ -92,7 +141,7 @@ function HomeContent() {
 
       <div className="flex-1 flex flex-col md:flex-row max-w-7xl mx-auto w-full">
         {/* Desktop sidebar */}
-        <aside className="hidden md:flex w-56 shrink-0 border-r bg-card flex-col p-3 gap-1">
+        <aside className="hidden md:flex w-56 shrink-0 border-r bg-card flex-col p-3 gap-1 overflow-y-auto">
           {TABS.map((tab) => {
             const Icon = tab.icon;
             const isActive = tab.id === activeTab;
@@ -113,7 +162,7 @@ function HomeContent() {
           })}
         </aside>
 
-        {/* Mobile tab bar (horizontal scroll) */}
+        {/* Mobile tab bar */}
         <div className="md:hidden border-b bg-card overflow-x-auto shrink-0">
           <div className="flex gap-1 px-2 py-2 w-max">
             {TABS.map((tab) => {
@@ -146,6 +195,9 @@ function HomeContent() {
             <p className="text-sm text-muted-foreground">{active.description}</p>
           </div>
 
+          {activeTab === "decks" && <DecksTab userId={userId} onNavigate={handleNavigate} />}
+          {activeTab === "flashcard" && <FlashcardTab userId={userId} initialDeckId={initialDeckId} />}
+          {activeTab === "games" && <GamesTab userId={userId} />}
           {activeTab === "library" && <LibraryTab userId={userId} />}
           {activeTab === "read" && <ReadTab userId={userId} />}
           {activeTab === "quiz" && <QuizTab userId={userId} />}
@@ -158,7 +210,7 @@ function HomeContent() {
 
       <footer className="border-t bg-card mt-auto">
         <div className="px-4 py-3 text-xs text-muted-foreground text-center max-w-7xl mx-auto">
-          Learn English · MVP · Reading + Quiz + Mastery + Shadowing
+          Learn English · FSRS Spaced Repetition · Free Dictionary API · Gemini AI
         </div>
       </footer>
     </div>
