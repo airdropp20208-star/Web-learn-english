@@ -1,7 +1,7 @@
 // Dictionary service — combines Free Dictionary API + cmu-pronouncing-dictionary (offline)
 // Returns: definitions, IPA, audio URL, examples — without calling Gemini
 
-import cmuDict from "cmu-pronouncing-dictionary";
+import { dictionary as cmuDict } from "cmu-pronouncing-dictionary";
 
 export interface DictionaryEntry {
   word: string;

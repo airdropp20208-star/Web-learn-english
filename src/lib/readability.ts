@@ -1,14 +1,14 @@
 // Readability scoring — browser-side CEFR estimation using text-readability
 // No API call needed, instant results
 
-import * as readability from "text-readability";
+import readability from "text-readability";
 import type { CEFRLevel } from "./types";
 
 export interface ReadabilityScore {
-  fleschKincaid: number; // Grade level (1-12+)
-  fleschReading: number; // Flesch Reading Ease (0-100, higher = easier)
-  smog: number; // SMOG index
-  ari: number; // Automated Readability Index
+  fleschKincaid: number;
+  fleschReading: number;
+  smog: number;
+  ari: number;
   cefrEstimate: CEFRLevel;
   wordCount: number;
   sentenceCount: number;
@@ -17,13 +17,6 @@ export interface ReadabilityScore {
 
 /**
  * Estimate CEFR level from Flesch-Kincaid grade.
- * Mapping is approximate, based on common ESL correlations:
- * - FK 1-3 → A1
- * - FK 4-5 → A2
- * - FK 6-7 → B1
- * - FK 8-9 → B2
- * - FK 10-11 → C1
- * - FK 12+ → C2
  */
 export function fkToCEFR(fk: number): CEFRLevel {
   if (fk <= 3) return "A1";
@@ -36,7 +29,6 @@ export function fkToCEFR(fk: number): CEFRLevel {
 
 /**
  * Compute readability scores for a text.
- * Returns null if text is too short to score meaningfully.
  */
 export function scoreText(text: string): ReadabilityScore | null {
   if (!text || text.trim().length < 20) return null;
@@ -51,6 +43,7 @@ export function scoreText(text: string): ReadabilityScore | null {
   let ari = 0;
 
   try {
+    // text-readability exports a default instance with methods
     fleschKincaid = readability.fleschKincaidGrade(text) || 0;
     fleschReading = readability.fleschReadingEase(text) || 100;
     smog = readability.smogIndex(text) || 0;
@@ -59,7 +52,6 @@ export function scoreText(text: string): ReadabilityScore | null {
     // Fall through with defaults
   }
 
-  // Clamp FK to reasonable range
   const fkClamped = Math.max(1, Math.min(20, fleschKincaid));
 
   return {
