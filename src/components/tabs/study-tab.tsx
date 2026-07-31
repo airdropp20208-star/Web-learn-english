@@ -1,18 +1,18 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
   BookOpen,
   Brain,
   ListChecks,
   FileText,
+  NotebookPen,
 } from "lucide-react";
 import { FlashcardTab } from "@/components/tabs/flashcard-tab";
 import { ReviewTab } from "@/components/tabs/review-tab";
 import { QuizTab } from "@/components/tabs/quiz-tab";
 import { ReadTab } from "@/components/tabs/read-tab";
+import { VocabTab } from "@/components/tabs/vocab-tab";
 
 interface StudyTabProps {
   userId: string;
@@ -21,7 +21,7 @@ interface StudyTabProps {
   onNavigate: (mode: "flashcard" | "review" | "quiz" | "read") => void;
 }
 
-type StudyMode = "flashcard" | "review" | "quiz" | "read";
+type StudyMode = "flashcard" | "review" | "quiz" | "read" | "vocab";
 
 const MODES: Array<{
   id: StudyMode;
@@ -33,6 +33,7 @@ const MODES: Array<{
   { id: "review", label: "Ôn tập", icon: Brain, desc: "FSRS spaced repetition" },
   { id: "quiz", label: "Quiz", icon: ListChecks, desc: "Trắc nghiệm + cloze" },
   { id: "read", label: "Đọc", icon: FileText, desc: "Paste text + analyze" },
+  { id: "vocab", label: "Từ vựng", icon: NotebookPen, desc: "Sổ từ của bạn" },
 ];
 
 export function StudyTab({
@@ -59,7 +60,7 @@ export function StudyTab({
               key={m.id}
               onClick={() => {
                 setMode(m.id);
-                onNavigate(m.id);
+                if (m.id !== "vocab") onNavigate(m.id);
               }}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium whitespace-nowrap transition-colors ${
                 isActive
@@ -79,6 +80,7 @@ export function StudyTab({
       {mode === "review" && <ReviewTab userId={userId} />}
       {mode === "quiz" && <QuizTab userId={userId} />}
       {mode === "read" && <ReadTab userId={userId} />}
+      {mode === "vocab" && <VocabTab userId={userId} />}
     </div>
   );
 }
