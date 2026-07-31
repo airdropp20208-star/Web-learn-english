@@ -174,7 +174,7 @@ export function DecksTab({ userId, onNavigate }: DecksTabProps) {
                         <Button
                           size="sm"
                           className="flex-1"
-                          onClick={() => onNavigate("flashcard", deck.id)}
+                          onClick={() => onNavigate("study:flashcard", deck.id)}
                         >
                           <BookOpen className="w-4 h-4 mr-1.5" />
                           Study
@@ -183,7 +183,7 @@ export function DecksTab({ userId, onNavigate }: DecksTabProps) {
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => onNavigate("review", deck.id)}
+                            onClick={() => onNavigate("study:review", deck.id)}
                           >
                             Review ({prog.dueWords})
                           </Button>
