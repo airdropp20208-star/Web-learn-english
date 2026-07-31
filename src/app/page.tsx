@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Home,
+  Compass,
   Layers,
   BookOpen,
   Library,
@@ -14,6 +15,7 @@ import {
   Flame,
 } from "lucide-react";
 import { HomeTab } from "@/components/tabs/home-tab";
+import { PathTab } from "@/components/tabs/path-tab";
 import { DecksTab } from "@/components/tabs/decks-tab";
 import { StudyTab } from "@/components/tabs/study-tab";
 import { LibraryTab } from "@/components/tabs/library-tab";
@@ -23,7 +25,14 @@ import { LandingPage } from "@/components/landing-page";
 import { DEFAULT_USER_ID } from "@/lib/auth";
 import { getState, type GamificationState } from "@/lib/gamification";
 
-type TabId = "home" | "decks" | "study" | "library" | "games" | "profile";
+type TabId =
+  | "home"
+  | "path"
+  | "decks"
+  | "study"
+  | "library"
+  | "games"
+  | "profile";
 
 type StudyModeId = "flashcard" | "review" | "quiz" | "read";
 
@@ -35,6 +44,7 @@ interface TabDef {
 
 const TABS: TabDef[] = [
   { id: "home", label: "Trang chủ", icon: Home },
+  { id: "path", label: "Lộ trình", icon: Compass },
   { id: "decks", label: "Bộ từ", icon: Layers },
   { id: "study", label: "Học", icon: BookOpen },
   { id: "library", label: "Thư viện", icon: Library },
@@ -144,6 +154,7 @@ function PageContent() {
       {/* Main content */}
       <main className="flex-1 max-w-5xl w-full mx-auto px-4 py-5 pb-24 md:pb-5">
         {activeTab === "home" && <HomeTab onNavigate={(t) => handleNavigate(t)} />}
+        {activeTab === "path" && <PathTab />}
         {activeTab === "decks" && (
           <DecksTab userId={userId} onNavigate={(t, did) => handleNavigate(t, did)} />
         )}
@@ -162,7 +173,7 @@ function PageContent() {
 
       {/* Bottom nav (mobile) */}
       <nav className="fixed bottom-0 left-0 right-0 z-40 border-t bg-card/95 backdrop-blur md:hidden">
-        <div className="grid grid-cols-6 max-w-5xl mx-auto">
+        <div className="grid grid-cols-7 max-w-5xl mx-auto">
           {TABS.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
