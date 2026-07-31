@@ -88,7 +88,7 @@ function HomeContent() {
       </header>
 
       <div className="flex-1 flex max-w-7xl mx-auto w-full">
-        <aside className="hidden md:flex w-56 border-r bg-card flex-col p-3 gap-1">
+        <aside className="hidden md:flex w-56 shrink-0 border-r bg-card flex-col p-3 gap-1">
           {TABS.map((tab) => {
             const Icon = tab.icon;
             const isActive = tab.id === activeTab;
@@ -109,7 +109,7 @@ function HomeContent() {
           })}
         </aside>
 
-        <div className="md:hidden border-b bg-card overflow-x-auto">
+        <div className="md:hidden border-b bg-card overflow-x-auto shrink-0">
           <div className="flex gap-1 px-2 py-2 min-w-max">
             {TABS.map((tab) => {
               const Icon = tab.icon;
@@ -132,7 +132,7 @@ function HomeContent() {
           </div>
         </div>
 
-        <main className="flex-1 min-w-0 p-4 sm:p-6">
+        <main className="flex-1 min-w-0 w-full p-4 sm:p-6">
           <div className="mb-4">
             <h2 className="text-xl font-semibold flex items-center gap-2">
               <active.icon className="w-5 h-5" />
