@@ -167,6 +167,34 @@ export function xpForLevel(level: number): number {
 }
 
 /**
+ * Mốc XP tại đó người dùng bắt đầu một level.
+ * Level 1 luôn bắt đầu từ 0 XP — dùng xpForLevel(1) sẽ ra 100 và làm
+ * thanh tiến độ hiện số âm cho người mới.
+ */
+export function xpFloorForLevel(level: number): number {
+  return level <= 1 ? 0 : xpForLevel(level);
+}
+
+/**
+ * Tiến độ XP trong level hiện tại: đã được bao nhiêu trên bao nhiêu.
+ */
+export function getLevelProgress(state: GamificationState): {
+  earned: number;
+  needed: number;
+  percent: number;
+} {
+  const floor = xpFloorForLevel(state.level);
+  const ceiling = xpForLevel(state.level + 1);
+  const needed = Math.max(1, ceiling - floor);
+  const earned = Math.max(0, state.xp - floor);
+  return {
+    earned,
+    needed,
+    percent: Math.max(0, Math.min(100, (earned / needed) * 100)),
+  };
+}
+
+/**
  * Get level from total XP.
  */
 export function levelFromXp(xp: number): number {

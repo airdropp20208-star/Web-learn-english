@@ -19,6 +19,7 @@ import {
 import {
   getState,
   getDailyProgress,
+  getLevelProgress,
   DAILY_GOAL,
   award,
   type GamificationState,
@@ -68,9 +69,7 @@ export function HomeTab({ onNavigate }: HomeTabProps) {
     );
   }
 
-  const xpForNextLevel = (state.level + 1) * (state.level + 1) * 100;
-  const xpForCurrentLevel = state.level * state.level * 100;
-  const xpProgress = ((state.xp - xpForCurrentLevel) / (xpForNextLevel - xpForCurrentLevel)) * 100;
+  const levelProgress = getLevelProgress(state);
   const goalDone = dailyProgress.current >= DAILY_GOAL;
 
   return (
@@ -136,13 +135,13 @@ export function HomeTab({ onNavigate }: HomeTabProps) {
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm font-medium">Level {state.level}</span>
             <span className="text-xs text-muted-foreground">
-              {state.xp - xpForCurrentLevel}/{xpForNextLevel - xpForCurrentLevel} XP
+              {levelProgress.earned}/{levelProgress.needed} XP
             </span>
           </div>
           <div className="h-2 bg-muted rounded-full overflow-hidden">
             <div
               className="h-full bg-gradient-to-r from-primary to-primary/70 transition-all"
-              style={{ width: `${Math.max(0, Math.min(100, xpProgress))}%` }}
+              style={{ width: `${levelProgress.percent}%` }}
             />
           </div>
         </div>

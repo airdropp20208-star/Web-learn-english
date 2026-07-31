@@ -14,8 +14,9 @@ import {
 } from "lucide-react";
 import {
   getState,
+  getLevelProgress,
   ACHIEVEMENTS,
-  xpForLevel,
+  type GamificationState,
 } from "@/lib/gamification";
 import { getVocabItems, getMemoryItems, getTexts } from "@/lib/storage";
 
@@ -25,7 +26,8 @@ interface ProfileTabProps {
 
 export function ProfileTab({ userId }: ProfileTabProps) {
   const [loading, setLoading] = useState(true);
-  const [state, setState] = useState(getState());
+  // null cho tới khi đọc xong localStorage — tránh lệch giữa server và client
+  const [state, setState] = useState<GamificationState | null>(null);
   const [vocabCount, setVocabCount] = useState(0);
   const [reviewCount, setReviewCount] = useState(0);
   const [textCount, setTextCount] = useState(0);
@@ -33,13 +35,13 @@ export function ProfileTab({ userId }: ProfileTabProps) {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      setState(getState());
       const [v, m, t] = await Promise.all([
         getVocabItems(userId),
         getMemoryItems(userId),
         getTexts(userId),
       ]);
       if (cancelled) return;
+      setState(getState());
       setVocabCount(v.length);
       setReviewCount(m.filter((x) => x.card.reps > 0).length);
       setTextCount(t.length);
@@ -50,13 +52,11 @@ export function ProfileTab({ userId }: ProfileTabProps) {
     };
   }, [userId]);
 
-  if (loading) {
+  if (loading || !state) {
     return <Skeleton className="h-96 w-full" />;
   }
 
-  const xpForCurrentLevel = xpForLevel(state.level);
-  const xpForNextLevel = xpForLevel(state.level + 1);
-  const xpProgress = ((state.xp - xpForCurrentLevel) / (xpForNextLevel - xpForCurrentLevel)) * 100;
+  const levelProgress = getLevelProgress(state);
 
   return (
     <div className="space-y-5 max-w-3xl mx-auto">
@@ -76,12 +76,15 @@ export function ProfileTab({ userId }: ProfileTabProps) {
         <div className="mt-4">
           <div className="flex items-center justify-between text-xs text-primary-foreground/80 mb-1">
             <span>Level {state.level}</span>
-            <span>Level {state.level + 1}</span>
+            <span>
+              {levelProgress.earned}/{levelProgress.needed} XP · Level{" "}
+              {state.level + 1}
+            </span>
           </div>
           <div className="h-2 bg-primary-foreground/20 rounded-full overflow-hidden">
             <div
-              className="h-full bg-primary-foreground"
-              style={{ width: `${Math.max(0, Math.min(100, xpProgress))}%` }}
+              className="h-full bg-primary-foreground transition-all"
+              style={{ width: `${levelProgress.percent}%` }}
             />
           </div>
         </div>
