@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import {
   Flame,
@@ -21,6 +21,7 @@ import {
   getDailyProgress,
   DAILY_GOAL,
   award,
+  type GamificationState,
 } from "@/lib/gamification";
 import { getNoActivityComment, getDailyGoalDoneComment } from "@/lib/humor";
 
@@ -28,24 +29,44 @@ interface HomeTabProps {
   onNavigate: (tab: string) => void;
 }
 
+interface DailyProgress {
+  current: number;
+  goal: number;
+  percent: number;
+}
+
 export function HomeTab({ onNavigate }: HomeTabProps) {
-  const [state, setState] = useState(() => getState());
-  const [dailyProgress, setDailyProgress] = useState(() => getDailyProgress());
+  // null until hydrated from localStorage (client-only) — avoids SSR mismatch
+  const [state, setState] = useState<GamificationState | null>(null);
+  const [dailyProgress, setDailyProgress] = useState<DailyProgress | null>(null);
 
   useEffect(() => {
-    // Daily login bonus on mount
+    // Daily login bonus on mount, then hydrate state from localStorage
     const today = new Date().toISOString().split("T")[0];
-    if (state.lastStudyDate !== today) {
+    if (getState().lastStudyDate !== today) {
       const { newAchievements } = award("daily-login");
-      setTimeout(() => {
-        setState(getState());
-        setDailyProgress(getDailyProgress());
-        newAchievements.forEach((a) => {
-          toast.success(`🏅 ${a.name}: ${a.description}`);
-        });
-      }, 0);
+      newAchievements.forEach((a) => {
+        toast.success(`🏅 ${a.name}: ${a.description}`);
+      });
     }
+    setState(getState());
+    setDailyProgress(getDailyProgress());
   }, []);
+
+  if (!state || !dailyProgress) {
+    return (
+      <div className="space-y-5 max-w-3xl mx-auto">
+        <Skeleton className="h-9 w-48" />
+        <div className="grid grid-cols-3 gap-3">
+          <Skeleton className="h-24 w-full" />
+          <Skeleton className="h-24 w-full" />
+          <Skeleton className="h-24 w-full" />
+        </div>
+        <Skeleton className="h-44 w-full" />
+        <Skeleton className="h-36 w-full" />
+      </div>
+    );
+  }
 
   const xpForNextLevel = (state.level + 1) * (state.level + 1) * 100;
   const xpForCurrentLevel = state.level * state.level * 100;
@@ -141,13 +162,13 @@ export function HomeTab({ onNavigate }: HomeTabProps) {
             icon={<BookOpen className="w-5 h-5" />}
             title="Flashcard"
             desc="Học từ mới"
-            onClick={() => onNavigate("study")}
+            onClick={() => onNavigate("study:flashcard")}
           />
           <QuickAction
             icon={<Brain className="w-5 h-5" />}
             title="Ôn tập"
             desc="FSRS review"
-            onClick={() => onNavigate("study")}
+            onClick={() => onNavigate("study:review")}
           />
           <QuickAction
             icon={<Gamepad2 className="w-5 h-5" />}
@@ -165,7 +186,7 @@ export function HomeTab({ onNavigate }: HomeTabProps) {
             icon={<Zap className="w-5 h-5" />}
             title="Đọc văn bản"
             desc="Paste text + analyze"
-            onClick={() => onNavigate("study")}
+            onClick={() => onNavigate("study:read")}
           />
         </div>
       </div>
