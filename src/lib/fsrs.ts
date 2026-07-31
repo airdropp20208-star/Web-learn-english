@@ -46,32 +46,40 @@ export function reviewCard(
 
 /**
  * Get a preview of scheduling for all 4 ratings (for UI display).
- * Returns: { again: {interval, due}, hard: ..., good: ..., easy: ... }
+ * Defensive: optional chaining + fallbacks so an unexpected ts-fsrs result
+ * shape never crashes the Review tab.
  */
 export function previewSchedule(card: Card): Record<
   "again" | "hard" | "good" | "easy",
   { intervalDays: number; dueDate: Date }
 > {
   const now = new Date();
-  const result = f.repeat(card, now) as Record<Rating, { card: Card; log: RecordLogItem }>;
+  const result = f.repeat(card, now) as Record<
+    number,
+    { card: Card; log: RecordLogItem } | undefined
+  >;
 
-  const preview: Record<string, { intervalDays: number; dueDate: Date }> = {};
-  const ratings: Array<"again" | "hard" | "good" | "easy"> = ["again", "hard", "good", "easy"];
-  const ratingValues = [Rating.Again, Rating.Hard, Rating.Good, Rating.Easy];
+  const mapping: Array<["again" | "hard" | "good" | "easy", number]> = [
+    ["again", Rating.Again],
+    ["hard", Rating.Hard],
+    ["good", Rating.Good],
+    ["easy", Rating.Easy],
+  ];
 
-  for (let i = 0; i < ratings.length; i++) {
-    const { card: c } = result[ratingValues[i]];
-    const intervalDays = (c.scheduled_days || 0);
-    preview[ratings[i]] = {
-      intervalDays,
-      dueDate: c.due ? new Date(c.due) : now,
-    };
-  }
-
-  return preview as Record<
+  const preview = {} as Record<
     "again" | "hard" | "good" | "easy",
     { intervalDays: number; dueDate: Date }
   >;
+
+  for (const [key, ratingValue] of mapping) {
+    const item = result[ratingValue];
+    preview[key] = {
+      intervalDays: item?.card?.scheduled_days ?? 0,
+      dueDate: item?.card?.due ? new Date(item.card.due) : now,
+    };
+  }
+
+  return preview;
 }
 
 /**
