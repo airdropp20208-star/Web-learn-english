@@ -1,13 +1,13 @@
 // Lõi chung cho các mini-game: sinh câu hỏi từ bộ từ và ghi kết quả vào FSRS.
 // Mục tiêu: chơi game cũng là học thật, không phải chơi cho vui rồi mất trắng.
 
+import { Rating } from "ts-fsrs";
 import type { FSRSCardState } from "./types";
 import {
   createNewCard,
   reviewCard,
   serializeCard,
   deserializeCard,
-  type ReviewRating,
 } from "./fsrs";
 import { markWordStudied, isCardStateDue } from "./deck-storage";
 
@@ -192,7 +192,7 @@ export function buildQuestions(
 
 /**
  * Ghi kết quả một câu trả lời vào lịch ôn FSRS của bộ từ.
- * Đúng = Good (4), sai = Again (2).
+ * Đúng = Good, sai = Again. Dùng tên enum, không gõ số trần.
  */
 export async function recordAnswer(
   deckId: string,
@@ -203,8 +203,7 @@ export async function recordAnswer(
   const card = previous
     ? deserializeCard(JSON.stringify(previous))
     : createNewCard();
-  const rating: ReviewRating = correct ? 4 : 2;
-  const { card: updated } = reviewCard(card, rating);
+  const { card: updated } = reviewCard(card, correct ? Rating.Good : Rating.Again);
   const next: FSRSCardState = JSON.parse(serializeCard(updated));
   await markWordStudied(deckId, word.index, word.word, next);
   return next;

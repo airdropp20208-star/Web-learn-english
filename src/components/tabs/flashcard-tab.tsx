@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
+import { Rating } from "ts-fsrs";
 import { BookOpen, Volume2, RotateCcw, Play, Sparkles } from "lucide-react";
 import type { FSRSCardState } from "@/lib/types";
 import {
@@ -51,11 +52,13 @@ interface QueueEntry {
 
 const SESSION_SIZE = 20;
 
+// Dùng tên mức đánh giá của ts-fsrs (Manual=0, Again=1, Hard=2, Good=3, Easy=4).
+// Gõ số trần là sai lệch một bậc và "Quá dễ" sẽ trỏ vào mức không tồn tại.
 const RATINGS: Array<{ rating: ReviewRating; label: string; className: string }> = [
-  { rating: 2, label: "Chưa nhớ", className: "bg-red-500 hover:bg-red-600" },
-  { rating: 3, label: "Khó", className: "bg-orange-500 hover:bg-orange-600" },
-  { rating: 4, label: "Nhớ", className: "bg-green-600 hover:bg-green-700" },
-  { rating: 5, label: "Quá dễ", className: "bg-blue-500 hover:bg-blue-600" },
+  { rating: Rating.Again, label: "Chưa nhớ", className: "bg-red-500 hover:bg-red-600" },
+  { rating: Rating.Hard, label: "Khó", className: "bg-orange-500 hover:bg-orange-600" },
+  { rating: Rating.Good, label: "Nhớ", className: "bg-green-600 hover:bg-green-700" },
+  { rating: Rating.Easy, label: "Quá dễ", className: "bg-blue-500 hover:bg-blue-600" },
 ];
 
 export function FlashcardTab({ userId, initialDeckId }: FlashcardTabProps) {
@@ -190,7 +193,7 @@ export function FlashcardTab({ userId, initialDeckId }: FlashcardTabProps) {
     if (entry.isNew) setLearnedCount((n) => n + 1);
 
     // “Chưa nhớ” thì đẩy thẻ xuống cuối để gặp lại ngay trong buổi này
-    if (rating === 2) {
+    if (rating === Rating.Again) {
       setQueue((prev) => [...prev, { ...entry, isNew: false }]);
     }
 
@@ -347,7 +350,7 @@ export function FlashcardTab({ userId, initialDeckId }: FlashcardTabProps) {
               <div className="grid grid-cols-4 gap-2">
                 {RATINGS.map((r) => (
                   <button
-                    key={r.rating}
+                    key={r.label}
                     onClick={() => handleRate(r.rating)}
                     className={`py-3 rounded-lg text-sm font-medium text-white transition-colors ${r.className}`}
                   >
