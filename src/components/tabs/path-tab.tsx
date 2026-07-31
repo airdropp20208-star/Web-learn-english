@@ -72,7 +72,7 @@ export function PathTab() {
           <div>
             <h1 className="text-lg font-semibold">Lộ trình học từ số 0</h1>
             <p className="text-sm text-muted-foreground mt-1">
-              Chưa biết \"động từ\" hay \"thì\" là gì cũng bắt đầu được. Học theo thứ
+              Chưa biết “động từ” hay “thì” là gì cũng bắt đầu được. Học theo thứ
               tự, mỗi bài 10 phút.
             </p>
           </div>
