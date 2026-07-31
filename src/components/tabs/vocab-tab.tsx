@@ -36,6 +36,7 @@ export function VocabTab({ userId }: VocabTabProps) {
   const [memories, setMemories] = useState<MemoryItemDTO[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [viCache, setViCache] = useState<Record<string, string>>({});
 
   useEffect(() => {
     let cancelled = false;
@@ -55,6 +56,40 @@ export function VocabTab({ userId }: VocabTabProps) {
       cancelled = true;
     };
   }, [userId]);
+
+  // Auto-fetch Vietnamese translation for vocab items that don't have it
+  useEffect(() => {
+    if (vocabs.length === 0) return;
+    let cancelled = false;
+
+    (async () => {
+      const toFetch = vocabs
+        .filter((v) => !v.vietnamese && !viCache[v.word])
+        .slice(0, 5); // limit concurrent fetches
+
+      for (const v of toFetch) {
+        if (cancelled) break;
+        try {
+          const res = await fetch("/api/translate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text: v.word, target: "vi" }),
+          });
+          if (!res.ok) continue;
+          const data = await res.json();
+          if (data.translation && !cancelled) {
+            setViCache((prev) => ({ ...prev, [v.word]: data.translation }));
+          }
+        } catch {
+          // silent fail
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [vocabs, viCache]);
 
   const memoryMap = useMemo(() => {
     const map = new Map<string, MemoryItemDTO>();
@@ -172,6 +207,11 @@ export function VocabTab({ userId }: VocabTabProps) {
                         )}
                       </div>
                       <p className="text-sm">{vocab.definition}</p>
+                      {(vocab.vietnamese || viCache[vocab.word]) && (
+                        <p className="text-sm font-medium text-primary mt-1">
+                          {vocab.vietnamese || viCache[vocab.word]}
+                        </p>
+                      )}
                       <p className="text-xs text-muted-foreground mt-1 italic">
                         "{vocab.contextSentence}"
                       </p>

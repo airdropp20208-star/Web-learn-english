@@ -35,11 +35,13 @@ export interface VocabItemDTO {
   userId: string;
   word: string;
   definition: string;
+  vietnamese?: string | null;
   exampleSentence: string;
+  exampleVietnamese?: string | null;
   contextSentence: string;
   cefrLevel: CEFRLevel;
-  ipa?: string | null;       // phonetic transcription
-  audioUrl?: string | null;  // dictionary audio URL
+  ipa?: string | null;
+  audioUrl?: string | null;
   sourceTextId: string;
   memoryItemId: string;
   createdAt: number;

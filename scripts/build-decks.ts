@@ -9,7 +9,9 @@ interface DeckWord {
   word: string;
   pos?: string;
   definition?: string;
+  vietnamese?: string;
   example?: string;
+  exampleVietnamese?: string;
   ipa?: string;
   audioUrl?: string;
   topic?: string;
@@ -48,14 +50,16 @@ function buildTOEIC600(): Deck {
     const fields = parseCSVLine(line);
     if (fields.length < 11) continue;
 
-    const [english, type, _vi, pronounce, explain, example, _exVi, _img, audio, topic] = fields;
+    const [english, type, vietnamese, pronounce, explain, example, exampleVi, _img, audio, topic] = fields;
     if (!english || !explain) continue;
 
     words.push({
       word: english.trim(),
       pos: type?.trim() || undefined,
       definition: explain.trim(),
+      vietnamese: vietnamese?.trim() || undefined,
       example: example?.trim() || undefined,
+      exampleVietnamese: exampleVi?.trim() || undefined,
       ipa: pronounce?.trim() || undefined,
       audioUrl: audio?.trim() || undefined,
       topic: topic?.trim() || undefined,
@@ -63,7 +67,7 @@ function buildTOEIC600(): Deck {
     });
   }
 
-  console.log(`  → ${words.length} words`);
+  console.log(`  → ${words.length} words (with Vietnamese translations)`);
   return {
     id: "toeic-600",
     name: "TOEIC 600 Essential Words",
@@ -204,7 +208,7 @@ function buildDailyConversations(): Deck {
     const fields = parseCSVLine(lines[i]);
     if (fields.length < 11) continue;
 
-    const [english, type, _vi, pronounce, explain, example, _exVi, _img, audio, topic] = fields;
+    const [english, type, vietnamese, pronounce, explain, example, exampleVi, _img, audio, topic] = fields;
     if (!english || !explain || !topic) continue;
     if (!dailyTopics.has(topic.trim())) continue;
 
@@ -212,7 +216,9 @@ function buildDailyConversations(): Deck {
       word: english.trim(),
       pos: type?.trim() || undefined,
       definition: explain.trim(),
+      vietnamese: vietnamese?.trim() || undefined,
       example: example?.trim() || undefined,
+      exampleVietnamese: exampleVi?.trim() || undefined,
       ipa: pronounce?.trim() || undefined,
       audioUrl: audio?.trim() || undefined,
       topic: topic.trim(),
@@ -220,7 +226,7 @@ function buildDailyConversations(): Deck {
     });
   }
 
-  console.log(`  → ${words.length} words`);
+  console.log(`  → ${words.length} words (with Vietnamese translations)`);
   return {
     id: "daily-conversations",
     name: "Daily Conversations",

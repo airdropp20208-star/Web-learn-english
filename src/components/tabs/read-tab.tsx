@@ -42,6 +42,7 @@ export function ReadTab({ userId }: ReadTabProps) {
   const [history, setHistory] = useState<TextDTO[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [featureError, setFeatureError] = useState<string | null>(null);
+  const [viCache, setViCache] = useState<Record<string, string>>({});
 
   async function loadHistory() {
     setLoadingHistory(true);
@@ -112,10 +113,33 @@ export function ReadTab({ userId }: ReadTabProps) {
       return;
     }
     if (savedVocabIds.has(word.word)) return;
+
+    // Fetch Vietnamese translation if not in cache
+    let vietnamese: string | null = viCache[word.word] ?? null;
+    if (!vietnamese) {
+      try {
+        const transRes = await fetch("/api/translate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: word.word, target: "vi" }),
+        });
+        if (transRes.ok) {
+          const transData = await transRes.json();
+          if (transData.translation) {
+            vietnamese = transData.translation;
+            setViCache((prev) => ({ ...prev, [word.word]: transData.translation }));
+          }
+        }
+      } catch {
+        // translation optional
+      }
+    }
+
     try {
       await saveVocabItem(userId, {
         word: word.word,
         definition: word.definition,
+        vietnamese,
         exampleSentence: word.example,
         contextSentence: word.contextSentence,
         cefrLevel: word.cefrLevel,
@@ -124,7 +148,7 @@ export function ReadTab({ userId }: ReadTabProps) {
         sourceTextId: savedText.id,
       });
       setSavedVocabIds((prev) => new Set(prev).add(word.word));
-      toast.success(`"${word.word}" saved to vocab`);
+      toast.success(`"${word.word}" saved to vocab${vietnamese ? ` (${vietnamese})` : ""}`);
     } catch (e: unknown) {
       toast.error("Failed to save vocab");
     }
@@ -138,6 +162,26 @@ export function ReadTab({ userId }: ReadTabProps) {
     if (highlightedWords.length === 0) {
       return <p className="leading-relaxed">{text}</p>;
     }
+
+    // Auto-fetch Vietnamese translations for highlighted words (background, no await)
+    for (const w of highlightedWords) {
+      if (!viCache[w.word]) {
+        // Fire and forget — VI will appear in popover when ready
+        fetch("/api/translate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: w.word, target: "vi" }),
+        })
+          .then((r) => r.ok ? r.json() : null)
+          .then((data) => {
+            if (data?.translation) {
+              setViCache((prev) => prev[w.word] ? prev : { ...prev, [w.word]: data.translation });
+            }
+          })
+          .catch(() => {});
+      }
+    }
+
     // Sort by position
     const sorted = [...highlightedWords].sort((a, b) => a.position - b.position);
     const parts: React.ReactNode[] = [];
@@ -186,6 +230,11 @@ export function ReadTab({ userId }: ReadTabProps) {
               </div>
               {w.definition && (
                 <p className="text-sm">{w.definition}</p>
+              )}
+              {viCache[w.word] && (
+                <p className="text-sm font-medium text-primary">
+                  {viCache[w.word]}
+                </p>
               )}
               {w.example && (
                 <div className="text-xs text-muted-foreground">

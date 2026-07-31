@@ -96,9 +96,26 @@ export function LibraryTab({ userId }: LibraryTabProps) {
       let savedCount = 0;
       for (const word of data.highlightedWords) {
         try {
+          // Fetch Vietnamese translation for this word
+          let vietnamese: string | null = null;
+          try {
+            const transRes = await fetch("/api/translate", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ text: word.word, target: "vi" }),
+            });
+            if (transRes.ok) {
+              const transData = await transRes.json();
+              if (transData.translation) vietnamese = transData.translation;
+            }
+          } catch {
+            // translation optional
+          }
+
           await saveVocabItem(userId, {
             word: word.word,
             definition: word.definition,
+            vietnamese,
             exampleSentence: word.example,
             contextSentence: word.contextSentence,
             cefrLevel: word.cefrLevel,

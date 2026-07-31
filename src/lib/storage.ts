@@ -71,7 +71,9 @@ function toVocabItemDTO(raw: any): VocabItemDTO {
     userId: raw.userId,
     word: raw.word,
     definition: raw.definition,
+    vietnamese: raw.vietnamese ?? null,
     exampleSentence: raw.exampleSentence,
+    exampleVietnamese: raw.exampleVietnamese ?? null,
     contextSentence: raw.contextSentence,
     cefrLevel: raw.cefrLevel as CEFRLevel,
     ipa: raw.ipa ?? null,
@@ -204,7 +206,9 @@ export async function saveVocabItem(
   data: {
     word: string;
     definition: string;
+    vietnamese?: string | null;
     exampleSentence: string;
+    exampleVietnamese?: string | null;
     contextSentence: string;
     cefrLevel: CEFRLevel;
     ipa?: string | null;
@@ -244,7 +248,9 @@ export async function saveVocabItem(
       userId,
       word: data.word,
       definition: data.definition,
+      vietnamese: data.vietnamese ?? null,
       exampleSentence: data.exampleSentence,
+      exampleVietnamese: data.exampleVietnamese ?? null,
       contextSentence: data.contextSentence,
       cefrLevel: data.cefrLevel,
       ipa: data.ipa ?? null,

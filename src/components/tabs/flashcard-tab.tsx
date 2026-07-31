@@ -24,7 +24,9 @@ interface DeckWord {
   word: string;
   pos?: string;
   definition?: string;
+  vietnamese?: string;
   example?: string;
+  exampleVietnamese?: string;
   ipa?: string;
   audioUrl?: string;
   topic?: string;
@@ -44,6 +46,8 @@ export function FlashcardTab({ userId, initialDeckId }: FlashcardTabProps) {
   const [flipped, setFlipped] = useState(false);
   const [loading, setLoading] = useState(true);
   const [studiedCount, setStudiedCount] = useState(0);
+  const [viTranslation, setViTranslation] = useState<string | null>(null);
+  const [translating, setTranslating] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -97,6 +101,40 @@ export function FlashcardTab({ userId, initialDeckId }: FlashcardTabProps) {
   }, [userId, initialDeckId]);
 
   const currentWord = selectedDeck?.words[currentIdx];
+
+  // Reset + auto-fetch Vietnamese translation when card changes
+  useEffect(() => {
+    if (!currentWord) return;
+    setViTranslation(currentWord.vietnamese ?? null);
+    setFlipped(false);
+
+    // If no Vietnamese in dataset, fetch from /api/translate
+    if (!currentWord.vietnamese && currentWord.word) {
+      let cancelled = false;
+      setTranslating(true);
+      (async () => {
+        try {
+          const res = await fetch("/api/translate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text: currentWord.word, target: "vi" }),
+          });
+          if (!res.ok) return;
+          const data = await res.json();
+          if (!cancelled && data.translation) {
+            setViTranslation(data.translation);
+          }
+        } catch (err) {
+          // silent fail — VI is optional
+        } finally {
+          if (!cancelled) setTranslating(false);
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }
+  }, [currentWord]);
 
   const handleNext = useCallback(async () => {
     if (!selectedDeck || !currentWord) return;
@@ -242,7 +280,7 @@ export function FlashcardTab({ userId, initialDeckId }: FlashcardTabProps) {
             onClick={() => setFlipped(!flipped)}
           >
             {!flipped ? (
-              /* Front: word + IPA + audio */
+              /* Front: word + IPA + audio + Vietnamese meaning */
               <div className="text-center space-y-4">
                 <div className="text-4xl font-bold">{currentWord.word}</div>
                 {currentWord.ipa && (
@@ -266,12 +304,27 @@ export function FlashcardTab({ userId, initialDeckId }: FlashcardTabProps) {
                 {currentWord.topic && (
                   <Badge variant="secondary">{currentWord.topic}</Badge>
                 )}
+                {viTranslation && (
+                  <div className="border-t pt-3 mt-2">
+                    <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">
+                      Nghĩa tiếng Việt
+                    </div>
+                    <div className="text-xl font-medium text-primary">
+                      {viTranslation}
+                    </div>
+                  </div>
+                )}
+                {translating && !viTranslation && (
+                  <div className="text-sm text-muted-foreground animate-pulse">
+                    Đang dịch...
+                  </div>
+                )}
                 <p className="text-sm text-muted-foreground mt-4">
                   Click card to flip →
                 </p>
               </div>
             ) : (
-              /* Back: definition + example */
+              /* Back: definition + example + Vietnamese */
               <div className="space-y-4 w-full">
                 <div className="text-center">
                   <div className="text-2xl font-semibold">{currentWord.word}</div>
@@ -290,10 +343,18 @@ export function FlashcardTab({ userId, initialDeckId }: FlashcardTabProps) {
                     </div>
                   )}
                 </div>
+                {viTranslation && (
+                  <div className="bg-primary/5 p-3 rounded-md text-center">
+                    <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">
+                      Nghĩa tiếng Việt
+                    </div>
+                    <p className="text-lg font-medium text-primary">{viTranslation}</p>
+                  </div>
+                )}
                 {currentWord.definition && (
                   <div className="border-t pt-3">
                     <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">
-                      Definition
+                      Definition (EN)
                     </div>
                     <p className="text-sm">{currentWord.definition}</p>
                   </div>
@@ -304,9 +365,14 @@ export function FlashcardTab({ userId, initialDeckId }: FlashcardTabProps) {
                       Example
                     </div>
                     <p className="text-sm italic">"{currentWord.example}"</p>
+                    {currentWord.exampleVietnamese && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        → {currentWord.exampleVietnamese}
+                      </p>
+                    )}
                   </div>
                 )}
-                {!currentWord.definition && (
+                {!currentWord.definition && !viTranslation && (
                   <div className="text-center text-sm text-muted-foreground py-4">
                     No definition available for this word.
                   </div>
