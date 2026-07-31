@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Gamepad2, Check, X, Clock, Trophy, Swords, Volume2 } from "lucide-react";
 import type { FSRSCardState } from "@/lib/types";
@@ -61,10 +61,9 @@ export function GamesTab({ userId }: GamesTabProps) {
           loaded.push({
             id: meta.id,
             name: meta.name,
-            words: (deck.words ?? []).map((w: Omit<GameWord, "index">, i: number) => ({
-              ...w,
-              index: i,
-            })),
+            words: (deck.words ?? []).map(
+              (w: Omit<GameWord, "index">, i: number) => ({ ...w, index: i })
+            ),
           });
         }
 
@@ -82,9 +81,13 @@ export function GamesTab({ userId }: GamesTabProps) {
     };
   }, [userId]);
 
-  // Nạp lịch ôn của bộ từ đang chọn để game ưu tiên từ đến hạn
+  /**
+   * Nạp lịch ôn của bộ từ đang chọn.
+   * Chỉ chạy khi đang ở menu — nếu nạp lúc đang chơi thì object cardStates
+   * đổi tham chiếu và làm ván đang chơi bị dựng lại.
+   */
   useEffect(() => {
-    if (!selectedDeckId) return;
+    if (!selectedDeckId || activeGame !== null) return;
     let cancelled = false;
     (async () => {
       const states = await getDeckCardStates(selectedDeckId);
@@ -99,6 +102,9 @@ export function GamesTab({ userId }: GamesTabProps) {
     () => decks.find((d) => d.id === selectedDeckId) ?? null,
     [decks, selectedDeckId]
   );
+
+  // Tham chiếu ổn định để các game con không bị reset khi tab này vẽ lại
+  const handleExit = useCallback(() => setActiveGame(null), []);
 
   function startGame(game: Exclude<GameType, null>) {
     if (!selectedDeck) return;
@@ -129,7 +135,7 @@ export function GamesTab({ userId }: GamesTabProps) {
         deckName={selectedDeck.name}
         words={selectedDeck.words}
         cardStates={cardStates}
-        onExit={() => setActiveGame(null)}
+        onExit={handleExit}
       />
     );
   }
@@ -139,7 +145,7 @@ export function GamesTab({ userId }: GamesTabProps) {
       <MatchGame
         deck={selectedDeck}
         cardStates={cardStates}
-        onExit={() => setActiveGame(null)}
+        onExit={handleExit}
       />
     );
   }
@@ -149,7 +155,7 @@ export function GamesTab({ userId }: GamesTabProps) {
       <SpellingGame
         deck={selectedDeck}
         cardStates={cardStates}
-        onExit={() => setActiveGame(null)}
+        onExit={handleExit}
       />
     );
   }
@@ -257,6 +263,9 @@ interface MatchPair {
   matched: boolean;
 }
 
+const MATCH_ROUNDS = 3;
+const MATCH_PAIRS = 5;
+
 function MatchGame({
   deck,
   cardStates,
@@ -269,8 +278,8 @@ function MatchGame({
   const [round, setRound] = useState(0);
   const [pairs, setPairs] = useState<MatchPair[]>([]);
   /**
-   * Thứ tự hiển thị cột nghĩa. Phải nằm trong state — bản cũ tính
-   * ngay trong render nên đồng hồ đếm ngược làm cột nghĩa nhảy mỗi giây.
+   * Thứ tự hiển thị cột nghĩa. Phải nằm trong state — bản cũ xáo ngay trong
+   * lúc render nên đồng hồ đếm ngược làm cột nghĩa nhảy mỗi giây.
    */
   const [meaningOrder, setMeaningOrder] = useState<number[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
@@ -284,8 +293,27 @@ function MatchGame({
     [deck.words]
   );
 
-  const generateRound = useCallback(() => {
-    const picked = pickWords(usableWords, cardStates, 5);
+  // Giữ trong ref để việc sinh vòng chơi không phụ thuộc danh tính hàm/prop
+  const statesRef = useRef(cardStates);
+  const exitRef = useRef(onExit);
+  useEffect(() => {
+    exitRef.current = onExit;
+  }, [onExit]);
+
+  /**
+   * Sinh vòng chơi đúng một lần mỗi khi số vòng đổi.
+   * Cố tình chỉ phụ thuộc [round] — mọi thứ khác đều đọc qua ref, nên không
+   * có đường nào để một lần vẽ lại bất kỳ làm xáo lại bàn chơi.
+   */
+  useEffect(() => {
+    if (usableWords.length < MATCH_PAIRS) {
+      toast.error(`Bộ từ này cần ít nhất ${MATCH_PAIRS} từ có nghĩa`);
+      exitRef.current();
+      return;
+    }
+    if (round >= MATCH_ROUNDS) return;
+
+    const picked = pickWords(usableWords, statesRef.current, MATCH_PAIRS);
     setPairs(
       picked.map((word) => ({
         word,
@@ -296,28 +324,20 @@ function MatchGame({
     setMeaningOrder(shuffle(picked.map((_, i) => i)));
     setSelected(null);
     setWrongPair(null);
-  }, [usableWords, cardStates]);
+  }, [round, usableWords]);
 
-  useEffect(() => {
-    if (usableWords.length < 5) {
-      toast.error("Bộ từ này cần ít nhất 5 từ có nghĩa");
-      onExit();
-      return;
-    }
-    generateRound();
-  }, [generateRound, usableWords.length, onExit]);
-
+  // Đồng hồ chung cho cả ván
   useEffect(() => {
     if (gameOver) return;
     if (timeLeft <= 0) {
       setGameOver(true);
-      award("game-play");
       return;
     }
     const timer = window.setTimeout(() => setTimeLeft((t) => t - 1), 1000);
     return () => window.clearTimeout(timer);
   }, [timeLeft, gameOver]);
 
+  // Hoàn thành một vòng
   useEffect(() => {
     if (pairs.length === 0 || !pairs.every((p) => p.matched)) return;
 
@@ -325,17 +345,15 @@ function MatchGame({
     const nextRound = round + 1;
     setRound(nextRound);
 
-    if (nextRound >= 3) {
+    if (nextRound >= MATCH_ROUNDS) {
       setGameOver(true);
       const { newAchievements } = award("game-win");
       toast.success(getGameComment(true), { duration: 3000 });
       newAchievements.forEach((a) => {
         toast.success(`🏅 ${a.name}: ${a.description}`, { duration: 5000 });
       });
-    } else {
-      window.setTimeout(generateRound, 800);
     }
-    // chạy đúng một lần mỗi khi vòng hoàn thành
+    // chạy theo pairs, không thêm dep khác để tránh chạy lại thừa
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pairs]);
 
@@ -360,10 +378,20 @@ function MatchGame({
         prev.map((p, i) => (i === idx ? { ...p, matched: true } : p))
       );
       setSelected(null);
-      void recordAnswer(deck.id, pairs[idx].word, true, cardStates[pairs[idx].word.word]);
+      void recordAnswer(
+        deck.id,
+        pairs[idx].word,
+        true,
+        statesRef.current[pairs[idx].word.word]
+      );
     } else {
       setWrongPair([selected, key]);
-      void recordAnswer(deck.id, pairs[selIdx].word, false, cardStates[pairs[selIdx].word.word]);
+      void recordAnswer(
+        deck.id,
+        pairs[selIdx].word,
+        false,
+        statesRef.current[pairs[selIdx].word.word]
+      );
       window.setTimeout(() => {
         setWrongPair(null);
         setSelected(null);
@@ -377,7 +405,9 @@ function MatchGame({
         <Trophy className="w-12 h-12 mx-auto text-amber-500" />
         <div>
           <div className="text-3xl font-bold">{score}</div>
-          <p className="text-sm text-muted-foreground">điểm sau {round} vòng</p>
+          <p className="text-sm text-muted-foreground">
+            điểm sau {Math.min(round, MATCH_ROUNDS)} vòng
+          </p>
         </div>
         <button
           onClick={onExit}
@@ -399,7 +429,9 @@ function MatchGame({
           ← Thoát
         </button>
         <div className="flex items-center gap-3 text-muted-foreground">
-          <span>Vòng {round + 1}/3</span>
+          <span>
+            Vòng {Math.min(round + 1, MATCH_ROUNDS)}/{MATCH_ROUNDS}
+          </span>
           <span>{score} điểm</span>
           <span
             className={`flex items-center gap-1 tabular-nums ${
@@ -508,8 +540,9 @@ function SpellingGame({
   cardStates: Record<string, FSRSCardState>;
   onExit: () => void;
 }) {
+  const statesRef = useRef(cardStates);
   const [words] = useState<GameWord[]>(() =>
-    pickWords(deck.words, cardStates, 10)
+    pickWords(deck.words, statesRef.current, 10)
   );
   const [currentIdx, setCurrentIdx] = useState(0);
   const [input, setInput] = useState("");
@@ -529,7 +562,7 @@ function SpellingGame({
     const correct = isTypedAnswerCorrect(input, current.word);
     setResult(correct ? "correct" : "wrong");
     if (correct) setScore((s) => s + 1);
-    void recordAnswer(deck.id, current, correct, cardStates[current.word]);
+    void recordAnswer(deck.id, current, correct, statesRef.current[current.word]);
   }
 
   function handleNext() {
