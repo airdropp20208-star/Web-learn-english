@@ -2,7 +2,19 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { Gamepad2, Check, X, Clock, Trophy, Swords, Volume2 } from "lucide-react";
+import {
+  Brain,
+  Check,
+  Clock,
+  Gamepad2,
+  Shuffle,
+  Swords,
+  ThumbsUp,
+  Trophy,
+  Volume2,
+  X,
+  Zap,
+} from "lucide-react";
 import type { FSRSCardState } from "@/lib/types";
 import {
   meaningOf,
@@ -17,6 +29,10 @@ import { getDeckCardStates, getSubscribedDecks } from "@/lib/deck-storage";
 import { award } from "@/lib/gamification";
 import { getGameComment } from "@/lib/humor";
 import { WordBattle } from "@/components/games/word-battle";
+import { SpeedQuiz } from "@/components/games/speed-quiz";
+import { WordScramble } from "@/components/games/word-scramble";
+import { MemoryFlip } from "@/components/games/memory-flip";
+import { TrueFalse } from "@/components/games/true-false";
 
 interface GamesTabProps {
   userId: string;
@@ -31,7 +47,83 @@ interface LoadedDeck extends DeckMeta {
   words: GameWord[];
 }
 
-type GameType = "battle" | "match" | "spelling" | null;
+type GameType =
+  | "battle"
+  | "speed"
+  | "match"
+  | "memory"
+  | "scramble"
+  | "truefalse"
+  | "spelling"
+  | null;
+
+interface GameDef {
+  id: Exclude<GameType, null>;
+  title: string;
+  desc: string;
+  meta: string;
+  icon: React.ComponentType<{ className?: string }>;
+  tone: string;
+}
+
+const GAMES: GameDef[] = [
+  {
+    id: "battle",
+    title: "Đấu trùm từ vựng",
+    desc: "12 câu, 3 tim, combo nhân sát thương. Trả lời đúng để hạ boss.",
+    meta: "Trộn 4 kiểu câu · 15 giây mỗi câu",
+    icon: Swords,
+    tone: "bg-rose-100 text-rose-600 dark:bg-rose-950/60 dark:text-rose-400",
+  },
+  {
+    id: "speed",
+    title: "Tốc chiến 60 giây",
+    desc: "Trả lời càng nhanh càng nhiều. Chuỗi đúng liên tiếp nhân điểm.",
+    meta: "60 giây · combo tới x3",
+    icon: Zap,
+    tone: "bg-amber-100 text-amber-600 dark:bg-amber-950/60 dark:text-amber-400",
+  },
+  {
+    id: "match",
+    title: "Nối từ",
+    desc: "Nối từ với nghĩa đúng trước khi hết giờ.",
+    meta: "3 vòng · 5 cặp · 60 giây",
+    icon: Trophy,
+    tone: "bg-blue-100 text-blue-600 dark:bg-blue-950/60 dark:text-blue-400",
+  },
+  {
+    id: "memory",
+    title: "Lật thẻ trí nhớ",
+    desc: "12 thẻ úp. Lật 2 thẻ mỗi lượt để ghép từ với nghĩa.",
+    meta: "2 vòng · 6 cặp · 120 giây",
+    icon: Brain,
+    tone: "bg-indigo-100 text-indigo-600 dark:bg-indigo-950/60 dark:text-indigo-400",
+  },
+  {
+    id: "scramble",
+    title: "Xếp chữ",
+    desc: "Cho nghĩa, ghép các chữ cái bị xáo thành từ đúng.",
+    meta: "8 từ · luyện nhớ mặt chữ",
+    icon: Shuffle,
+    tone: "bg-emerald-100 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-400",
+  },
+  {
+    id: "truefalse",
+    title: "Đúng hay Sai",
+    desc: "Cặp từ - nghĩa hiện ra, quyết định xem có khớp không.",
+    meta: "20 cặp · 60 giây",
+    icon: ThumbsUp,
+    tone: "bg-teal-100 text-teal-600 dark:bg-teal-950/60 dark:text-teal-400",
+  },
+  {
+    id: "spelling",
+    title: "Nghe viết chính tả",
+    desc: "Nghe phát âm rồi gõ lại đúng từ.",
+    meta: "10 từ · luyện nghe",
+    icon: Volume2,
+    tone: "bg-purple-100 text-purple-600 dark:bg-purple-950/60 dark:text-purple-400",
+  },
+];
 
 export function GamesTab({ userId }: GamesTabProps) {
   const [decks, setDecks] = useState<LoadedDeck[]>([]);
@@ -140,6 +232,50 @@ export function GamesTab({ userId }: GamesTabProps) {
     );
   }
 
+  if (activeGame === "speed") {
+    return (
+      <SpeedQuiz
+        deckId={selectedDeck.id}
+        words={selectedDeck.words}
+        cardStates={cardStates}
+        onExit={handleExit}
+      />
+    );
+  }
+
+  if (activeGame === "memory") {
+    return (
+      <MemoryFlip
+        deckId={selectedDeck.id}
+        words={selectedDeck.words}
+        cardStates={cardStates}
+        onExit={handleExit}
+      />
+    );
+  }
+
+  if (activeGame === "scramble") {
+    return (
+      <WordScramble
+        deckId={selectedDeck.id}
+        words={selectedDeck.words}
+        cardStates={cardStates}
+        onExit={handleExit}
+      />
+    );
+  }
+
+  if (activeGame === "truefalse") {
+    return (
+      <TrueFalse
+        deckId={selectedDeck.id}
+        words={selectedDeck.words}
+        cardStates={cardStates}
+        onExit={handleExit}
+      />
+    );
+  }
+
   if (activeGame === "match") {
     return (
       <MatchGame
@@ -162,8 +298,10 @@ export function GamesTab({ userId }: GamesTabProps) {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-xl border bg-card p-4 flex items-center gap-3">
-        <Gamepad2 className="w-5 h-5 text-primary" />
+      <div className="rounded-2xl border bg-card p-4 flex items-center gap-3">
+        <div className="w-10 h-10 rounded-xl bg-brand flex items-center justify-center shrink-0">
+          <Gamepad2 className="w-5 h-5 text-white" />
+        </div>
         <div>
           <h3 className="font-semibold">Chơi mà học</h3>
           <p className="text-sm text-muted-foreground">
@@ -189,69 +327,36 @@ export function GamesTab({ userId }: GamesTabProps) {
         ))}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <GameCard
-          icon={<Swords className="w-6 h-6 text-rose-600" />}
-          tone="bg-rose-100 dark:bg-rose-950"
-          title="Đấu trùm từ vựng"
-          desc="12 câu, 3 tim, combo nhân sát thương. Trả lời đúng để hạ boss."
-          meta="Trộn 4 kiểu câu · 15 giây mỗi câu"
-          onClick={() => startGame("battle")}
-        />
-        <GameCard
-          icon={<Trophy className="w-6 h-6 text-blue-600" />}
-          tone="bg-blue-100 dark:bg-blue-950"
-          title="Nối từ"
-          desc="Nối từ với nghĩa đúng trước khi hết giờ."
-          meta="3 vòng · 5 cặp · 60 giây"
-          onClick={() => startGame("match")}
-        />
-        <GameCard
-          icon={<Volume2 className="w-6 h-6 text-purple-600" />}
-          tone="bg-purple-100 dark:bg-purple-950"
-          title="Nghe viết chính tả"
-          desc="Nghe phát âm rồi gõ lại đúng từ."
-          meta="10 từ"
-          onClick={() => startGame("spelling")}
-        />
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {GAMES.map((game) => {
+          const Icon = game.icon;
+          return (
+            <button
+              key={game.id}
+              onClick={() => startGame(game.id)}
+              className="group rounded-2xl border bg-card p-4 text-left transition-all hover:border-primary/40 hover:-translate-y-0.5 hover:card-elevated"
+            >
+              <div className="flex items-start gap-3">
+                <div
+                  className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${game.tone}`}
+                >
+                  <Icon className="w-5 h-5" />
+                </div>
+                <div className="min-w-0">
+                  <h3 className="font-semibold">{game.title}</h3>
+                  <p className="text-sm text-muted-foreground mt-0.5">
+                    {game.desc}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    {game.meta}
+                  </p>
+                </div>
+              </div>
+            </button>
+          );
+        })}
       </div>
     </div>
-  );
-}
-
-function GameCard({
-  icon,
-  tone,
-  title,
-  desc,
-  meta,
-  onClick,
-}: {
-  icon: React.ReactNode;
-  tone: string;
-  title: string;
-  desc: string;
-  meta: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className="rounded-xl border bg-card p-5 text-left hover:shadow-md hover:border-primary/30 transition-all"
-    >
-      <div className="flex items-start gap-3">
-        <div
-          className={`w-12 h-12 rounded-lg flex items-center justify-center shrink-0 ${tone}`}
-        >
-          {icon}
-        </div>
-        <div>
-          <h3 className="font-semibold">{title}</h3>
-          <p className="text-sm text-muted-foreground mt-1">{desc}</p>
-          <p className="text-xs text-muted-foreground mt-2">{meta}</p>
-        </div>
-      </div>
-    </button>
   );
 }
 
