@@ -137,9 +137,9 @@ export function HomeTab({ onNavigate }: HomeTabProps) {
             {levelProgress.earned}/{levelProgress.needed} XP
           </span>
         </div>
-        <div className="h-2.5 rounded-full bg-muted overflow-hidden">
+        <div className="h-2.5 rounded-full bg-muted overflow-hidden ring-1 ring-inset ring-border/50">
           <div
-            className="h-full bg-brand transition-all duration-500"
+            className="h-full bg-brand rounded-full transition-all duration-700 ease-out shadow-[0_0_12px_-2px_oklch(0.55_0.21_278/60%)]"
             style={{ width: `${levelProgress.percent}%` }}
           />
         </div>

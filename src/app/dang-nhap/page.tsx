@@ -33,9 +33,9 @@ export default async function SignInPage({
   const { callbackUrl } = await searchParams;
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-background px-4 py-10">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-background bg-mesh px-4 py-10">
       <Link href="/" className="flex items-center gap-2.5 mb-8">
-        <div className="w-10 h-10 rounded-xl bg-brand flex items-center justify-center text-white font-bold">
+        <div className="w-10 h-10 rounded-xl bg-brand glow-brand flex items-center justify-center text-white font-bold">
           L
         </div>
         <div className="leading-tight">
@@ -50,7 +50,7 @@ export default async function SignInPage({
           gitHubEnabled={isGitHubOAuthConfigured()}
         />
       ) : (
-        <div className="w-full max-w-sm rounded-2xl border bg-card p-6 text-center">
+        <div className="w-full max-w-sm rounded-2xl border border-border/70 bg-card card-elevated p-6 text-center">
           <h1 className="font-semibold mb-2">Chưa bật tài khoản</h1>
           <p className="text-sm text-muted-foreground mb-4">
             Máy chủ này chưa cấu hình database nên chưa tạo tài khoản được. Bạn
@@ -59,7 +59,7 @@ export default async function SignInPage({
           </p>
           <Link
             href="/?app=1"
-            className="inline-flex h-10 items-center justify-center rounded-xl bg-brand px-4 text-sm font-medium text-white"
+            className="inline-flex h-10 items-center justify-center rounded-xl bg-brand glow-brand press px-4 text-sm font-medium text-white"
           >
             Vào học luôn
           </Link>

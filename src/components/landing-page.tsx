@@ -115,10 +115,14 @@ const FAQS = [
 
 export function LandingPage({ onStart }: LandingPageProps) {
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background bg-mesh">
       {/* Hero */}
       <section className="relative overflow-hidden border-b">
-        <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-primary/5" />
+        <div className="absolute inset-0 bg-gradient-to-br from-primary/12 via-transparent to-fuchsia-500/10" />
+        {/* Hai quầng sáng mờ: hero phẳng thì phần còn lại của trang có đẹp
+            cũng không cứu được ấn tượng đầu. */}
+        <div className="absolute -top-28 -left-24 w-[28rem] h-[28rem] rounded-full bg-primary/15 blur-3xl" />
+        <div className="absolute -top-20 -right-24 w-[26rem] h-[26rem] rounded-full bg-fuchsia-500/12 blur-3xl" />
         <div className="relative max-w-5xl mx-auto px-4 py-16 sm:py-24 text-center">
           <Badge variant="secondary" className="mb-4">
             <Sparkles className="w-3 h-3 mr-1" />
@@ -127,7 +131,7 @@ export function LandingPage({ onStart }: LandingPageProps) {
           <h1 className="text-4xl sm:text-5xl font-bold tracking-tight mb-4">
             Học từ vựng tiếng Anh
             <br />
-            <span className="text-primary">có lộ trình, nhớ lâu</span>
+            <span className="text-brand">có lộ trình, nhớ lâu</span>
           </h1>
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto mb-8">
             Thay vì mở 5 app khác nhau, bạn chỉ cần một chỗ: chọn bộ từ, học flashcard,
@@ -135,7 +139,7 @@ export function LandingPage({ onStart }: LandingPageProps) {
             4000 Essential Words.
           </p>
           <div className="flex gap-3 justify-center flex-wrap">
-            <Button size="lg" onClick={onStart} className="gap-2">
+            <Button size="lg" onClick={onStart} className="gap-2 text-base px-7">
               Bắt đầu học miễn phí
               <ArrowRight className="w-4 h-4" />
             </Button>
@@ -145,7 +149,7 @@ export function LandingPage({ onStart }: LandingPageProps) {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-16 max-w-3xl mx-auto">
             {STATS.map((s) => (
               <div key={s.label}>
-                <div className="text-3xl font-bold text-primary">{s.value}</div>
+                <div className="text-3xl sm:text-4xl font-bold text-brand">{s.value}</div>
                 <div className="text-sm text-muted-foreground">{s.label}</div>
               </div>
             ))}
@@ -223,10 +227,11 @@ export function LandingPage({ onStart }: LandingPageProps) {
       </section>
 
       {/* CTA */}
-      <section className="border-t bg-primary text-primary-foreground">
-        <div className="max-w-3xl mx-auto px-4 py-16 text-center">
+      <section className="relative overflow-hidden border-t bg-brand text-white">
+        <div className="absolute -bottom-24 left-1/2 -translate-x-1/2 w-[34rem] h-[34rem] rounded-full bg-white/10 blur-3xl" />
+        <div className="relative max-w-3xl mx-auto px-4 py-16 text-center">
           <h2 className="text-3xl font-bold mb-3">Bắt đầu miễn phí, không cần cài app</h2>
-          <p className="text-primary-foreground/80 mb-8">
+          <p className="text-white/80 mb-8">
             Mở trình duyệt là học được. Muốn đồng bộ nhiều thiết bị thì đăng nhập, còn
             không thì cứ học thẳng.
           </p>
