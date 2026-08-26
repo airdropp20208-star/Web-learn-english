@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 
 import {
   checkRateLimit,
+  clearRateLimitKey,
   clientIpKey,
   rateLimitHeaders,
   rateLimitKey,
@@ -246,5 +247,53 @@ describe("mặc định dùng đồng hồ thật", () => {
 
     vi.setSystemTime(new Date("2026-06-15T12:01:01.000Z"));
     expect(checkRateLimit("khoa", r).allowed).toBe(true);
+  });
+});
+
+/**
+ * Bộ đếm không được xoá khi đăng nhập thành công là một lỗi thật đã gặp:
+ * người gõ nhầm mật khẩu bốn lần rồi gõ đúng vẫn còn bốn dấu trong sổ, đăng
+ * xuất rồi quay lại trong cùng cửa sổ là bị chặn.
+ */
+describe("clearRateLimitKey", () => {
+  it("xoá sạch dấu của một khoá, khoá đó lại đủ suất từ đầu", () => {
+    const r = rule("clear-co-ban", 3);
+    checkRateLimit("nguoi-a", r);
+    checkRateLimit("nguoi-a", r);
+    expect(checkRateLimit("nguoi-a", r).remaining).toBe(0);
+
+    clearRateLimitKey("nguoi-a", r);
+
+    expect(checkRateLimit("nguoi-a", r).remaining).toBe(2);
+  });
+
+  it("không đụng tới khoá khác dùng cùng quy tắc", () => {
+    const r = rule("clear-rieng-le", 2);
+    checkRateLimit("nguoi-a", r);
+    checkRateLimit("nguoi-b", r);
+
+    clearRateLimitKey("nguoi-a", r);
+
+    expect(checkRateLimit("nguoi-a", r).remaining).toBe(1);
+    // nguoi-b đã dùng 1 trong 2 suất và phải giữ nguyên như vậy.
+    expect(checkRateLimit("nguoi-b", r).remaining).toBe(0);
+  });
+
+  it("xoá được nhiều tầng quy tắc trong một lượt", () => {
+    const nhanh = rule("clear-nhanh", 2, MINUTE);
+    const cham = rule("clear-cham", 5, HOUR);
+    checkRateLimit("nguoi-a", [nhanh, cham]);
+    checkRateLimit("nguoi-a", [nhanh, cham]);
+    expect(checkRateLimit("nguoi-a", [nhanh, cham]).allowed).toBe(false);
+
+    clearRateLimitKey("nguoi-a", [nhanh, cham]);
+
+    expect(checkRateLimit("nguoi-a", [nhanh, cham]).allowed).toBe(true);
+  });
+
+  it("xoá khoá chưa từng có dấu nào thì không nổ", () => {
+    const r = rule("clear-trong", 1);
+    expect(() => clearRateLimitKey("chua-ton-tai", r)).not.toThrow();
+    expect(checkRateLimit("chua-ton-tai", r).allowed).toBe(true);
   });
 });

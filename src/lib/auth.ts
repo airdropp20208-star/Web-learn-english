@@ -9,6 +9,7 @@ import { getPrisma, isDatabaseConfigured } from "./prisma";
 import { PASSWORD_MIN_LENGTH } from "./auth-constants";
 import {
   checkRateLimit,
+  clearRateLimitKey,
   clientIpKey,
   SHARED_FALLBACK_KEY,
   type RateLimitRule,
@@ -207,6 +208,11 @@ function buildProviders(): NextAuthConfig["providers"] {
         const ok = await bcrypt.compare(password, user?.passwordHash ?? DUMMY_PASSWORD_HASH);
 
         if (!user || !user.passwordHash || !ok) return null;
+
+        // Mật khẩu đúng là bằng chứng lượt này không phải dò mò. Xoá bộ đếm
+        // của email để người vừa gõ nhầm mấy lần không bị chặn ở lần đăng
+        // nhập ngay sau đó. Bộ đếm theo IP thì giữ — xem clearRateLimitKey.
+        clearRateLimitKey(`email:${email}`, LOGIN_EMAIL_RULES);
 
         return {
           id: user.id,

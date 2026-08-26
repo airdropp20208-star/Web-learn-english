@@ -242,6 +242,27 @@ export function checkRateLimit(
   };
 }
 
+/**
+ * Xoá bộ đếm của `key` ở những quy tắc đã cho.
+ *
+ * Dùng khi một lượt thử đã tự chứng minh là người thật — đăng nhập đúng mật
+ * khẩu chẳng hạn. Không xoá thì người gõ nhầm bốn lần rồi gõ đúng vẫn còn bốn
+ * dấu trong sổ: đăng xuất rồi quay lại trong cùng cửa sổ là bị chặn, dù mật
+ * khẩu hoàn toàn đúng.
+ *
+ * Chỉ nên gọi cho khoá gắn với **danh tính**, đừng gọi cho khoá theo IP: một
+ * lượt thành công không nói lên gì về những lượt hỏng khác đến từ cùng IP, mà
+ * xoá thì kẻ dò chỉ cần xen một lần đăng nhập đúng vào tài khoản của chính
+ * mình là làm mới hạn mức IP sau mỗi loạt thử.
+ */
+export function clearRateLimitKey(
+  key: string,
+  rules: RateLimitRule | RateLimitRule[]
+): void {
+  const list = Array.isArray(rules) ? rules : [rules];
+  for (const rule of list) buckets.delete(rule.name + "|" + key);
+}
+
 /** Xoá toàn bộ bộ đếm. Chỉ dùng trong test — mỗi test phải bắt đầu từ nền sạch. */
 export function resetRateLimitStore(): void {
   buckets.clear();
