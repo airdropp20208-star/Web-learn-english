@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import { BookOpen, ArrowLeft, Sparkles } from "lucide-react";
 import type { CEFRLevel, AnalyzeResponse, TextDTO } from "@/lib/types";
 import { createText, saveVocabItem, getTexts, getVocabItems } from "@/lib/storage";
+import { CEFR_COLOR } from "@/lib/level-colors";
 import {
   estimateUserLevel,
   loadCefrSpine,
@@ -36,15 +37,6 @@ interface ReadingText {
   content: string;
   wordCount: number;
 }
-
-const CEFR_COLOR: Record<CEFRLevel, string> = {
-  A1: "bg-emerald-100 text-emerald-700 border-emerald-200",
-  A2: "bg-emerald-100 text-emerald-700 border-emerald-200",
-  B1: "bg-amber-100 text-amber-700 border-amber-200",
-  B2: "bg-orange-100 text-orange-700 border-orange-200",
-  C1: "bg-rose-100 text-rose-700 border-rose-200",
-  C2: "bg-red-100 text-red-700 border-red-200",
-};
 
 export function LibraryTab({ userId }: LibraryTabProps) {
   const [texts, setTexts] = useState<ReadingText[]>([]);

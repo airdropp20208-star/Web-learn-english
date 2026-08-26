@@ -18,19 +18,11 @@ import { PronounceButton } from "@/components/pronounce-button";
 import type { VocabItemDTO, MemoryItemDTO, CEFRLevel } from "@/lib/types";
 import { getVocabItems, getMemoryItems } from "@/lib/storage";
 import { estimateRecallProbability } from "@/lib/mastery-engine";
+import { CEFR_COLOR } from "@/lib/level-colors";
 
 interface VocabTabProps {
   userId: string;
 }
-
-const CEFR_COLOR: Record<CEFRLevel, string> = {
-  A1: "bg-emerald-100 text-emerald-700 border-emerald-200",
-  A2: "bg-emerald-100 text-emerald-700 border-emerald-200",
-  B1: "bg-amber-100 text-amber-700 border-amber-200",
-  B2: "bg-orange-100 text-orange-700 border-orange-200",
-  C1: "bg-rose-100 text-rose-700 border-rose-200",
-  C2: "bg-red-100 text-red-700 border-red-200",
-};
 
 export function VocabTab({ userId }: VocabTabProps) {
   const [vocabs, setVocabs] = useState<VocabItemDTO[]>([]);

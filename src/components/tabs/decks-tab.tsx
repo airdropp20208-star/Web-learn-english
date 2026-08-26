@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { CATEGORY_COLOR } from "@/lib/level-colors";
 import { toast } from "sonner";
 import { Library, Check, Plus, ArrowRight, BookOpen } from "lucide-react";
 
@@ -30,15 +31,6 @@ interface DeckProgress {
   dueWords: number;
   masteryPercent: number;
 }
-
-const CATEGORY_COLORS: Record<string, string> = {
-  TOEIC: "bg-blue-100 text-blue-700 border-blue-200",
-  IELTS: "bg-purple-100 text-purple-700 border-purple-200",
-  Oxford: "bg-emerald-100 text-emerald-700 border-emerald-200",
-  Daily: "bg-amber-100 text-amber-700 border-amber-200",
-  Essential: "bg-rose-100 text-rose-700 border-rose-200",
-  CEFR: "bg-indigo-100 text-indigo-700 border-indigo-200",
-};
 
 export function DecksTab({ userId, onNavigate }: DecksTabProps) {
   const [decks, setDecks] = useState<DeckIndex[]>([]);
@@ -140,7 +132,7 @@ export function DecksTab({ userId, onNavigate }: DecksTabProps) {
                     </div>
                     <Badge
                       variant="outline"
-                      className={CATEGORY_COLORS[deck.category] || "bg-muted"}
+                      className={CATEGORY_COLOR[deck.category] || "bg-muted"}
                     >
                       {deck.category}
                     </Badge>

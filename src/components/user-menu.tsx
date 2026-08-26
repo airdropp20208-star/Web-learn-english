@@ -4,12 +4,16 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
+import { useTheme } from "next-themes";
 import {
   Cloud,
   CloudOff,
   LogIn,
   LogOut,
+  Monitor,
+  Moon,
   RefreshCw,
+  Sun,
   Trash2,
   TriangleAlert,
 } from "lucide-react";
@@ -20,6 +24,8 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -51,6 +57,43 @@ function relativeTime(ts: number): string {
   const hours = Math.round(minutes / 60);
   if (hours < 24) return `${hours} giờ trước`;
   return `${Math.round(hours / 24)} ngày trước`;
+}
+
+/**
+ * Chọn giao diện sáng / tối / theo hệ thống.
+ *
+ * Dự án đã cài `next-themes` và có sẵn đủ token màu cho chế độ tối, nhưng
+ * chưa từng có nút nào để bật — người dùng bị buộc theo cài đặt hệ điều hành,
+ * kể cả khi họ muốn học buổi tối bằng nền tối trên một máy đang để nền sáng.
+ *
+ * Không cần chống lệch hydrate: menu chỉ được mount khi người dùng mở ra, lúc
+ * đó đã ở client và `theme` đã đọc được.
+ */
+function ThemeRow() {
+  const { theme, setTheme } = useTheme();
+
+  return (
+    <DropdownMenuRadioGroup
+      value={theme ?? "system"}
+      onValueChange={setTheme}
+    >
+      <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+        Giao diện
+      </DropdownMenuLabel>
+      <DropdownMenuRadioItem value="light" className="cursor-pointer">
+        <Sun className="w-4 h-4 mr-2" />
+        Sáng
+      </DropdownMenuRadioItem>
+      <DropdownMenuRadioItem value="dark" className="cursor-pointer">
+        <Moon className="w-4 h-4 mr-2" />
+        Tối
+      </DropdownMenuRadioItem>
+      <DropdownMenuRadioItem value="system" className="cursor-pointer">
+        <Monitor className="w-4 h-4 mr-2" />
+        Theo hệ thống
+      </DropdownMenuRadioItem>
+    </DropdownMenuRadioGroup>
+  );
 }
 
 /** Dòng trạng thái đồng bộ trong menu. Chỉ hiện khi đã đăng nhập. */
@@ -189,6 +232,9 @@ export function UserMenu() {
               </Link>
             </DropdownMenuItem>
           )}
+
+          <DropdownMenuSeparator />
+          <ThemeRow />
 
           <DropdownMenuSeparator />
           <DropdownMenuItem
