@@ -12,8 +12,10 @@
  */
 import { NextResponse } from "next/server";
 
+import { guardRequest } from "@/lib/api-guard";
 import { getSessionUserId, isAuthConfigured } from "@/lib/auth";
 import { getPrisma } from "@/lib/prisma";
+import { RATE_LIMITS } from "@/lib/rate-limit";
 import { syncSnapshotSchema } from "@/server/sync-schema";
 import { readSnapshot, writeSnapshot } from "@/server/sync-store";
 
@@ -21,7 +23,7 @@ export const runtime = "nodejs";
 /** Dữ liệu riêng của từng người — không được cache ở bất kỳ tầng nào. */
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(request: Request) {
   if (!isAuthConfigured()) {
     return NextResponse.json(
       { error: "Máy chủ chưa cấu hình tài khoản. Đồng bộ không khả dụng." },
@@ -34,10 +36,15 @@ export async function GET() {
     return NextResponse.json({ error: "Chưa đăng nhập." }, { status: 401 });
   }
 
+  // Đếm hạn mức sau khi đã biết `userId`, và truyền nó vào để khoá theo tài
+  // khoản thay vì theo IP — cả nhà chung một IP thì không chặn nhầm nhau.
+  const gate = await guardRequest(request, RATE_LIMITS.syncPull, { userId });
+  if (!gate.ok) return gate.response;
+
   try {
     const snapshot = await readSnapshot(getPrisma(), userId);
     return NextResponse.json(snapshot, {
-      headers: { "Cache-Control": "no-store" },
+      headers: { ...gate.headers, "Cache-Control": "no-store" },
     });
   } catch (err) {
     console.error("[sync] GET thất bại:", err);
@@ -61,6 +68,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Chưa đăng nhập." }, { status: 401 });
   }
 
+  const gate = await guardRequest(request, RATE_LIMITS.syncPush, { userId });
+  if (!gate.ok) return gate.response;
+
   let body: unknown;
   try {
     body = await request.json();
@@ -78,7 +88,7 @@ export async function POST(request: Request) {
 
   try {
     await writeSnapshot(getPrisma(), userId, parsed.data);
-    return NextResponse.json({ ok: true, syncedAt: Date.now() });
+    return NextResponse.json({ ok: true, syncedAt: Date.now() }, { headers: gate.headers });
   } catch (err) {
     console.error("[sync] POST thất bại:", err);
     return NextResponse.json(

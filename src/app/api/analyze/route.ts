@@ -2,6 +2,9 @@
 // Gemini is used ONLY for summary generation (80% reduction in Gemini usage)
 
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
+import { guardRequest, readJson } from "@/lib/api-guard";
+import { RATE_LIMITS } from "@/lib/rate-limit";
 import { getDictionaryEntries } from "@/lib/dictionary";
 import { scoreText } from "@/lib/readability";
 import { GeminiError, generateSummary } from "@/lib/ai-client";
@@ -94,25 +97,30 @@ function findWordPosition(content: string, word: string): number {
   return idx === -1 ? 0 : idx;
 }
 
+/**
+ * Trần 20.000 ký tự là con số đã có sẵn trong route, nay chuyển sang zod.
+ * Nó cũng là trần cho cả app: mọi bài đọc đều được lưu sau khi đi qua đây, nên
+ * `/api/quiz` lấy đúng con số này làm mốc.
+ */
+const analyzeSchema = z.object({
+  text: z
+    .string()
+    .max(20_000, "Bài đọc quá dài, tối đa 20000 ký tự.")
+    .refine((value) => value.trim().length > 0, "Thiếu nội dung bài đọc."),
+});
+
 export async function POST(req: NextRequest) {
+  // Cho khách dùng: dán một bài rồi phân tích là bước đầu tiên của app, chặn
+  // sau đăng nhập là mất luôn người dùng thử. Nhưng route này gọi Gemini nên
+  // hạn mức có thêm tầng theo giờ, không chỉ theo phút.
+  const gate = await guardRequest(req, RATE_LIMITS.analyze);
+  if (!gate.ok) return gate.response;
+
+  const parsed = await readJson(req, analyzeSchema);
+  if (!parsed.ok) return parsed.response;
+  const { text } = parsed.data;
+
   try {
-    const body = await req.json();
-    const { text } = body as { text?: string };
-
-    if (!text || typeof text !== "string" || text.trim().length === 0) {
-      return NextResponse.json(
-        { error: "Missing or invalid 'text' field" },
-        { status: 400 }
-      );
-    }
-
-    if (text.length > 20000) {
-      return NextResponse.json(
-        { error: "Text too long (max 20000 characters)" },
-        { status: 400 }
-      );
-    }
-
     // 1. Compute readability (client-side library, no API call)
     const readability = scoreText(text);
 
@@ -175,7 +183,7 @@ export async function POST(req: NextRequest) {
       } : null,
     };
 
-    return NextResponse.json(response);
+    return NextResponse.json(response, { headers: gate.headers });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json({ error: message }, { status: 500 });

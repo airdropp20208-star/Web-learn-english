@@ -3,41 +3,56 @@
 // Returns Vietnamese translation for an English word or short text
 
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
+
+import { guardRequest, languageCodeSchema, readJson } from "@/lib/api-guard";
+import { RATE_LIMITS } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
 // In-memory cache (per server instance) — translations are stable
 const cache = new Map<string, string>();
 
+/**
+ * Đầu vào của route dịch.
+ *
+ * Trần 1.000 ký tự giữ nguyên như code cũ: chỗ gọi thật chỉ dịch một từ hoặc
+ * một câu ví dụ, còn endpoint Google không chính thức vốn dành cho đoạn ngắn.
+ *
+ * `source`/`target` bắt buộc phải là mã ngôn ngữ. Trước đây chúng được nối
+ * thẳng vào query string gửi sang Google mà không mã hoá — client nhét được
+ * `&` cùng tham số lạ vào request mà máy chủ ta đứng tên gửi đi.
+ */
+const translateSchema = z.object({
+  text: z
+    .string()
+    .max(1000, "Văn bản quá dài, tối đa 1000 ký tự.")
+    .refine((value) => value.trim().length > 0, "Thiếu văn bản cần dịch."),
+  source: languageCodeSchema.default("en"),
+  target: languageCodeSchema.default("vi"),
+});
+
 export async function POST(req: NextRequest) {
+  // Không bắt đăng nhập: tra nghĩa là thao tác cơ bản nhất của app, khách phải
+  // dùng được. Đổi lại thì siết tần suất, vì mỗi lượt là một request gửi tới
+  // endpoint Google không chính thức — lạm dụng là chặn IP.
+  const gate = await guardRequest(req, RATE_LIMITS.translate);
+  if (!gate.ok) return gate.response;
+
+  const parsed = await readJson(req, translateSchema);
+  if (!parsed.ok) return parsed.response;
+  const { text, source, target } = parsed.data;
+
   try {
-    const body = await req.json();
-    const { text, source = "en", target = "vi" } = body as {
-      text?: string;
-      source?: string;
-      target?: string;
-    };
-
-    if (!text || typeof text !== "string" || text.trim().length === 0) {
-      return NextResponse.json(
-        { error: "Missing 'text' field" },
-        { status: 400 }
-      );
-    }
-
-    if (text.length > 1000) {
-      return NextResponse.json(
-        { error: "Text too long (max 1000 characters)" },
-        { status: 400 }
-      );
-    }
-
     const cacheKey = `${source}:${target}:${text.toLowerCase().trim()}`;
     if (cache.has(cacheKey)) {
-      return NextResponse.json({
-        translation: cache.get(cacheKey),
-        source: "cache",
-      });
+      return NextResponse.json(
+        {
+          translation: cache.get(cacheKey),
+          source: "cache",
+        },
+        { headers: gate.headers }
+      );
     }
 
     // Try Google Translate free endpoint first (unofficial, no key)
@@ -63,10 +78,13 @@ export async function POST(req: NextRequest) {
 
           if (translation && translation !== text) {
             cache.set(cacheKey, translation);
-            return NextResponse.json({
-              translation,
-              source: "google",
-            });
+            return NextResponse.json(
+              {
+                translation,
+                source: "google",
+              },
+              { headers: gate.headers }
+            );
           }
         }
       }
@@ -88,10 +106,13 @@ export async function POST(req: NextRequest) {
         const translation = data?.responseData?.translatedText;
         if (translation && translation !== text && !translation.includes("MYMEMORY WARNING")) {
           cache.set(cacheKey, translation);
-          return NextResponse.json({
-            translation,
-            source: "mymemory",
-          });
+          return NextResponse.json(
+            {
+              translation,
+              source: "mymemory",
+            },
+            { headers: gate.headers }
+          );
         }
       }
     } catch (err) {
@@ -100,7 +121,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(
       { error: "Translation service unavailable", translation: null },
-      { status: 503 }
+      { status: 503, headers: gate.headers }
     );
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";
