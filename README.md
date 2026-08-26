@@ -191,11 +191,29 @@ Tất cả đều tuỳ chọn — xem [.env.example](.env.example) để biết
 2. Import repo vào Vercel.
 3. Đặt biến môi trường: `DATABASE_URL`, `AUTH_SECRET`, và `GEMINI_API_KEYS` nếu muốn
    bật các tính năng AI.
-4. Build command để `npm run vercel-build` (`prisma generate && next build`). Bước
-   `generate` phải nằm trong build chứ không chỉ ở `postinstall`: Vercel cache
-   `node_modules` nên khi trúng cache, `postinstall` bị bỏ qua và build hỏng vì thiếu
-   Prisma Client.
-5. Chạy migration một lần: `npm run db:deploy` (hoặc thêm vào build command).
+4. Build command để `npm run vercel-build`:
+   `prisma generate && node scripts/migrate-if-configured.mjs && next build`
+
+   - Bước `generate` phải nằm trong build chứ không chỉ ở `postinstall`: Vercel
+     cache `node_modules` nên khi trúng cache, `postinstall` bị bỏ qua và build
+     hỏng vì thiếu Prisma Client.
+   - Bước migrate tự bỏ qua khi không có `DATABASE_URL` (để bản deploy chế độ
+     khách vẫn build được), và làm build đỏ khi có `DATABASE_URL` mà migrate
+     hỏng — đẩy code mới lên schema cũ là cách nhanh nhất để hỏng dữ liệu thật.
+
+Không cần chạy `npm run db:deploy` bằng tay nữa; nó vẫn còn đó nếu bạn muốn
+migrate riêng.
+
+### Header bảo mật
+
+`next.config.ts` gắn sẵn CSP, `X-Frame-Options`, `X-Content-Type-Options`,
+`Referrer-Policy`, `Permissions-Policy` và HSTS cho mọi route.
+`tests/e2e/security-headers.spec.ts` đọc header thật để chúng không bị xoá nhầm.
+
+Hai điểm cần biết: `Permissions-Policy` để `microphone=(self)` vì tab Luyện nói
+cần ghi âm — siết lại là tắt hẳn tính năng đó. Và `script-src` vẫn phải có
+`'unsafe-inline'` do Next.js cùng next-themes chèn script nội tuyến; muốn bỏ thì
+phải chuyển sang nonce sinh trong middleware.
 
 ## Đóng góp
 
