@@ -11,8 +11,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { registerUser } from "@/server/actions/auth";
 import { PASSWORD_MIN_LENGTH } from "@/lib/auth-constants";
+import { thongBaoLoiDangNhap, type SignInMode } from "./sign-in-error";
 
-type Mode = "signin" | "register";
+type Mode = SignInMode;
 
 export function SignInForm({
   callbackUrl,
@@ -52,11 +53,9 @@ export function SignInForm({
       });
 
       if (!result || result.error) {
-        setError(
-          mode === "register"
-            ? "Tạo tài khoản xong nhưng đăng nhập không thành công. Thử đăng nhập lại."
-            : "Email hoặc mật khẩu không đúng."
-        );
+        // `result.code` là thứ `authorize()` gửi kèm khi từ chối — nhờ nó mà
+        // "bị chặn tạm thời" không bị hiển thị nhầm thành "sai mật khẩu".
+        setError(thongBaoLoiDangNhap(result?.code, mode));
         return;
       }
 
