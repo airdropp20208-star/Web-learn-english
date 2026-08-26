@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, Suspense } from "react";
+import { forwardRef, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   Home,
@@ -10,6 +10,9 @@ import {
   Library,
   Gamepad2,
   User,
+  LineChart,
+  Mic,
+  MoreHorizontal,
   Coins,
   Flame,
   Sparkles,
@@ -21,8 +24,19 @@ import { StudyTab } from "@/components/tabs/study-tab";
 import { LibraryTab } from "@/components/tabs/library-tab";
 import { GamesTab } from "@/components/tabs/games-tab";
 import { ProfileTab } from "@/components/tabs/profile-tab";
+import { ProgressTab } from "@/components/tabs/progress-tab";
+import { ShadowTab } from "@/components/tabs/shadow-tab";
 import { LandingPage } from "@/components/landing-page";
 import { UserMenu } from "@/components/user-menu";
+import {
+  Drawer,
+  DrawerClose,
+  DrawerContent,
+  DrawerDescription,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerTrigger,
+} from "@/components/ui/drawer";
 import { useGamification } from "@/hooks/use-gamification";
 import { useCurrentUserId } from "@/hooks/use-current-user-id";
 
@@ -33,6 +47,8 @@ type TabId =
   | "study"
   | "library"
   | "games"
+  | "progress"
+  | "shadow"
   | "profile";
 
 type StudyModeId = "flashcard" | "review" | "quiz" | "read";
@@ -42,17 +58,33 @@ interface TabDef {
   label: string;
   shortLabel: string;
   icon: React.ComponentType<{ className?: string }>;
+  /** Mô tả ngắn, chỉ hiện trong ngăn kéo "Thêm" trên điện thoại. */
+  hint: string;
+  /**
+   * Có nằm trên thanh dưới của điện thoại không.
+   *
+   * Thanh dưới chỉ vừa 5 ô cộng nút "Thêm" ở bề ngang 360px; nhồi cả 9 tab
+   * vào thì mỗi ô còn 40px, hẹp hơn vùng chạm tối thiểu 44px. Nên năm tab
+   * dùng nhiều nhất ở lại thanh dưới, phần còn lại vào ngăn kéo. Thanh bên
+   * của desktop không bị giới hạn này nên vẫn hiện đủ chín.
+   */
+  primary: boolean;
 }
 
 const TABS: TabDef[] = [
-  { id: "home", label: "Trang chủ", shortLabel: "Nhà", icon: Home },
-  { id: "path", label: "Lộ trình", shortLabel: "Lộ trình", icon: Compass },
-  { id: "decks", label: "Bộ từ", shortLabel: "Bộ từ", icon: Layers },
-  { id: "study", label: "Học", shortLabel: "Học", icon: BookOpen },
-  { id: "library", label: "Thư viện", shortLabel: "Đọc", icon: Library },
-  { id: "games", label: "Game", shortLabel: "Game", icon: Gamepad2 },
-  { id: "profile", label: "Hồ sơ", shortLabel: "Tôi", icon: User },
+  { id: "home", label: "Trang chủ", shortLabel: "Nhà", icon: Home, hint: "Việc cần làm hôm nay", primary: true },
+  { id: "path", label: "Lộ trình", shortLabel: "Lộ trình", icon: Compass, hint: "Đi từ A1 lên C2", primary: true },
+  { id: "decks", label: "Bộ từ", shortLabel: "Bộ từ", icon: Layers, hint: "Chọn và theo dõi bộ từ vựng", primary: true },
+  { id: "study", label: "Học", shortLabel: "Học", icon: BookOpen, hint: "Flashcard, ôn tập, quiz, đọc", primary: true },
+  { id: "games", label: "Game", shortLabel: "Game", icon: Gamepad2, hint: "Học bằng trò chơi", primary: true },
+  { id: "library", label: "Thư viện", shortLabel: "Đọc", icon: Library, hint: "Bài đọc theo trình độ", primary: false },
+  { id: "progress", label: "Tiến độ", shortLabel: "Tiến độ", icon: LineChart, hint: "Độ thành thạo và điều kiện lên hạng", primary: false },
+  { id: "shadow", label: "Luyện nói", shortLabel: "Nói", icon: Mic, hint: "Nghe rồi nhại lại, có ghi âm", primary: false },
+  { id: "profile", label: "Hồ sơ", shortLabel: "Tôi", icon: User, hint: "Thành tích, huy hiệu, cài đặt", primary: false },
 ];
+
+const PRIMARY_TABS = TABS.filter((t) => t.primary);
+const SECONDARY_TABS = TABS.filter((t) => !t.primary);
 
 export default function Page() {
   return (
@@ -88,9 +120,15 @@ function PageContent() {
   const [initialDeckId, setInitialDeckId] = useState<string | undefined>(
     undefined
   );
+  const [moreOpen, setMoreOpen] = useState(false);
   // Đọc từ store: tự vẽ lại ngay khi award() cộng điểm, và `useSyncExternalStore`
   // lo phần hydrate nên không lệch nội dung giữa server và client.
   const gamificationState = useGamification();
+
+  function goToTab(tab: TabId) {
+    setActiveTab(tab);
+    setMoreOpen(false);
+  }
 
   function handleNavigate(tab: string, deckId?: string) {
     if (tab.startsWith("study:")) {
@@ -141,7 +179,8 @@ function PageContent() {
             return (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => goToTab(tab.id)}
+                aria-current={isActive ? "page" : undefined}
                 className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all text-left ${
                   isActive
                     ? "bg-brand text-white shadow-sm"
@@ -232,48 +271,125 @@ function PageContent() {
           )}
           {activeTab === "library" && <LibraryTab userId={userId} />}
           {activeTab === "games" && <GamesTab userId={userId} />}
+          {activeTab === "progress" && <ProgressTab userId={userId} />}
+          {activeTab === "shadow" && <ShadowTab userId={userId} />}
           {activeTab === "profile" && <ProfileTab userId={userId} />}
         </main>
       </div>
 
-      {/* Thanh điều hướng dưới (điện thoại) */}
-      <nav className="fixed bottom-0 left-0 right-0 z-40 border-t bg-background/90 backdrop-blur-xl md:hidden pb-[env(safe-area-inset-bottom)]">
-        <div className="grid grid-cols-7">
-          {TABS.map((tab) => {
-            const Icon = tab.icon;
-            const isActive = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className="relative flex flex-col items-center gap-1 py-2"
-              >
-                {/* Vạch chỉ báo tab đang chọn */}
-                <span
-                  className={`absolute top-0 h-0.5 w-8 rounded-full transition-opacity ${
-                    isActive ? "bg-brand opacity-100" : "opacity-0"
-                  }`}
-                />
-                <Icon
-                  className={`w-5 h-5 transition-colors ${
-                    isActive ? "text-primary" : "text-muted-foreground"
-                  }`}
-                />
-                <span
-                  className={`text-[10px] font-medium transition-colors ${
-                    isActive ? "text-primary" : "text-muted-foreground"
-                  }`}
-                >
-                  {tab.shortLabel}
-                </span>
-              </button>
-            );
-          })}
+      {/* Thanh điều hướng dưới (điện thoại): năm tab chính cộng ngăn kéo "Thêm" */}
+      <nav
+        aria-label="Điều hướng chính"
+        className="fixed bottom-0 left-0 right-0 z-40 border-t bg-background/90 backdrop-blur-xl md:hidden pb-[env(safe-area-inset-bottom)]"
+      >
+        <div className="grid grid-cols-6">
+          {PRIMARY_TABS.map((tab) => (
+            <BottomNavButton
+              key={tab.id}
+              icon={tab.icon}
+              label={tab.shortLabel}
+              active={activeTab === tab.id}
+              onClick={() => goToTab(tab.id)}
+            />
+          ))}
+
+          <Drawer open={moreOpen} onOpenChange={setMoreOpen}>
+            <DrawerTrigger asChild>
+              <BottomNavButton
+                icon={MoreHorizontal}
+                label="Thêm"
+                /* Sáng lên cả khi tab đang mở nằm trong ngăn kéo, để người dùng
+                   không tưởng mình đang lạc ngoài mọi mục. */
+                active={SECONDARY_TABS.some((t) => t.id === activeTab)}
+                aria-label="Mở thêm mục"
+              />
+            </DrawerTrigger>
+            <DrawerContent>
+              <DrawerHeader className="text-left">
+                <DrawerTitle>Thêm</DrawerTitle>
+                <DrawerDescription>
+                  Những mục không nằm trên thanh dưới.
+                </DrawerDescription>
+              </DrawerHeader>
+              <div className="grid grid-cols-2 gap-2 px-4 pb-6">
+                {SECONDARY_TABS.map((tab) => {
+                  const Icon = tab.icon;
+                  const isActive = activeTab === tab.id;
+                  return (
+                    <button
+                      key={tab.id}
+                      onClick={() => goToTab(tab.id)}
+                      aria-current={isActive ? "page" : undefined}
+                      className={`flex flex-col items-start gap-1 rounded-xl border p-3 text-left transition-colors ${
+                        isActive
+                          ? "border-brand bg-brand/10"
+                          : "hover:bg-accent"
+                      }`}
+                    >
+                      <Icon
+                        className={`w-5 h-5 ${
+                          isActive ? "text-primary" : "text-muted-foreground"
+                        }`}
+                      />
+                      <span className="text-sm font-medium">{tab.label}</span>
+                      <span className="text-[11px] text-muted-foreground leading-snug">
+                        {tab.hint}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              <DrawerClose className="sr-only">Đóng</DrawerClose>
+            </DrawerContent>
+          </Drawer>
         </div>
       </nav>
     </div>
   );
 }
+
+/**
+ * Một ô trên thanh dưới. Tách ra vì nút "Thêm" phải nhận được `ref` và các
+ * props mà `DrawerTrigger asChild` truyền xuống — trước đây nav dựng nút
+ * ngay tại chỗ nên không làm được việc đó.
+ */
+const BottomNavButton = forwardRef<
+  HTMLButtonElement,
+  {
+    icon: React.ComponentType<{ className?: string }>;
+    label: string;
+    active: boolean;
+  } & React.ComponentPropsWithoutRef<"button">
+>(function BottomNavButton({ icon: Icon, label, active, ...props }, ref) {
+  return (
+    <button
+      ref={ref}
+      aria-current={active ? "page" : undefined}
+      /* min-h-14: giữ vùng chạm không tụt dưới ngưỡng 44px kể cả ở 360px. */
+      className="relative flex min-h-14 flex-col items-center justify-center gap-1 py-2"
+      {...props}
+    >
+      {/* Vạch chỉ báo tab đang chọn */}
+      <span
+        className={`absolute top-0 h-0.5 w-8 rounded-full transition-opacity ${
+          active ? "bg-brand opacity-100" : "opacity-0"
+        }`}
+      />
+      <Icon
+        className={`w-5 h-5 transition-colors ${
+          active ? "text-primary" : "text-muted-foreground"
+        }`}
+      />
+      <span
+        className={`text-[10px] font-medium transition-colors ${
+          active ? "text-primary" : "text-muted-foreground"
+        }`}
+      >
+        {label}
+      </span>
+    </button>
+  );
+});
 
 function Pill({
   icon,
