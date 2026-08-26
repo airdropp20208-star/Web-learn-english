@@ -52,8 +52,11 @@ export async function POST(req: NextRequest) {
     });
 
     if (!ltRes.ok) {
+      // Mã trạng thái của bên thứ ba là chuyện của log, không phải của người
+      // đang gõ bài. Họ chỉ cần biết nên làm gì tiếp.
+      console.error("[grammar] LanguageTool trả về", ltRes.status);
       return NextResponse.json(
-        { error: `LanguageTool API error: ${ltRes.status}` },
+        { error: "Dịch vụ kiểm tra ngữ pháp đang bận. Thử lại sau ít phút nhé." },
         { status: 502 }
       );
     }
@@ -84,11 +87,16 @@ export async function POST(req: NextRequest) {
   } catch (err: unknown) {
     if (err instanceof Error && err.name === "TimeoutError") {
       return NextResponse.json(
-        { error: "Grammar check timed out. Try again." },
+        { error: "Kiểm tra ngữ pháp lâu quá nên phải dừng. Thử lại nhé." },
         { status: 504 }
       );
     }
-    const message = err instanceof Error ? err.message : "Unknown error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    // Không dội nguyên văn lỗi về client: thông điệp nội bộ có thể lộ đường
+    // dẫn hoặc chi tiết hạ tầng, mà người dùng cũng không làm gì được với nó.
+    console.error("[grammar] lỗi không lường trước:", err);
+    return NextResponse.json(
+      { error: "Không kiểm tra được ngữ pháp lúc này." },
+      { status: 500 }
+    );
   }
 }

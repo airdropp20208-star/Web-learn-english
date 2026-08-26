@@ -120,11 +120,14 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json(
-      { error: "Translation service unavailable", translation: null },
+      { error: "Dịch vụ dịch đang không phản hồi. Thử lại sau nhé.", translation: null },
       { status: 503, headers: gate.headers }
     );
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error("[translate] lỗi không lường trước:", err);
+    return NextResponse.json(
+      { error: "Không dịch được lúc này.", translation: null },
+      { status: 500 }
+    );
   }
 }
