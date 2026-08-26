@@ -123,7 +123,7 @@ export function SpeedQuiz({ deckId, words, cardStates, onExit }: SpeedQuizProps)
 
   if (finished) {
     return (
-      <div className="rounded-2xl border bg-card p-8 text-center space-y-4 max-w-md mx-auto">
+      <div className="rounded-2xl border border-border/70 bg-card card-elevated p-8 text-center space-y-4 max-w-md mx-auto">
         <Zap className="w-12 h-12 mx-auto text-amber-500" />
         <div>
           <div className="text-4xl font-bold">{score}</div>
@@ -186,7 +186,7 @@ export function SpeedQuiz({ deckId, words, cardStates, onExit }: SpeedQuizProps)
         />
       </div>
 
-      <div className="rounded-2xl border bg-card p-6">
+      <div className="rounded-2xl border border-border/70 bg-card card-elevated p-6">
         <p className="text-xs text-muted-foreground text-center mb-2">
           {current.kind === "meaning-to-word" ? "Nghĩa này là từ nào?" : "Từ này nghĩa là gì?"}
         </p>
@@ -240,7 +240,7 @@ function EmptyState({
   onExit: () => void;
 }) {
   return (
-    <div className="rounded-2xl border bg-card p-8 text-center space-y-4 max-w-md mx-auto">
+    <div className="rounded-2xl border border-border/70 bg-card card-elevated p-8 text-center space-y-4 max-w-md mx-auto">
       <p className="text-sm text-muted-foreground">{message}</p>
       <button
         onClick={onExit}

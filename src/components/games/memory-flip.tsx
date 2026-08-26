@@ -157,7 +157,7 @@ export function MemoryFlip({
 
   if (gameOver) {
     return (
-      <div className="rounded-2xl border bg-card p-8 text-center space-y-4 max-w-md mx-auto">
+      <div className="rounded-2xl border border-border/70 bg-card card-elevated p-8 text-center space-y-4 max-w-md mx-auto">
         <Brain className="w-12 h-12 mx-auto text-indigo-500" />
         <div>
           <div className="text-3xl font-bold">{score}</div>

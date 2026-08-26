@@ -202,7 +202,7 @@ export function WordBattle({
 
   if (questions.length === 0) {
     return (
-      <div className="rounded-xl border bg-card p-8 text-center space-y-3">
+      <div className="rounded-xl border border-border/70 bg-card card-elevated p-8 text-center space-y-3">
         <Swords className="w-10 h-10 mx-auto text-muted-foreground" />
         <p className="font-medium">Bộ từ này chưa đủ dữ liệu để đấu</p>
         <p className="text-sm text-muted-foreground">
@@ -221,7 +221,7 @@ export function WordBattle({
   if (phase !== "playing") {
     const won = phase === "won";
     return (
-      <div className="rounded-2xl border bg-card p-8 text-center space-y-4">
+      <div className="rounded-2xl border border-border/70 bg-card card-elevated p-8 text-center space-y-4">
         <div className="text-5xl">{won ? "🏆" : "💀"}</div>
         <h2 className="text-xl font-bold">
           {won ? `Hạ gục ${BOSS_NAME}!` : "Thua rồi"}
@@ -293,7 +293,7 @@ export function WordBattle({
       </div>
 
       {/* Boss */}
-      <div className="rounded-2xl border bg-card p-5 space-y-3">
+      <div className="rounded-2xl border border-border/70 bg-card card-elevated p-5 space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="text-2xl">🐲</span>
@@ -326,7 +326,7 @@ export function WordBattle({
       </div>
 
       {/* Câu hỏi */}
-      <div className="rounded-2xl border bg-card p-6 space-y-4">
+      <div className="rounded-2xl border border-border/70 bg-card card-elevated p-6 space-y-4">
         <p className="text-xs text-muted-foreground text-center">
           {current.kind === "listen" && "Nghe và chọn từ đúng"}
           {current.kind === "spell" && "Gõ từ tiếng Anh đúng nghĩa"}

@@ -206,15 +206,15 @@ function PageContent() {
   const activeLabel = TABS.find((t) => t.id === activeTab)?.label ?? "";
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background bg-mesh">
       {/* Thanh bên (desktop) */}
-      <aside className="hidden md:flex fixed left-0 top-0 bottom-0 w-60 border-r bg-sidebar flex-col p-4 z-30">
+      <aside className="hidden md:flex fixed left-0 top-0 bottom-0 w-60 border-r border-border/60 bg-sidebar/80 backdrop-blur-xl flex-col p-4 z-30">
         <button
           onClick={() => setShowLanding(true)}
           aria-label="Về trang giới thiệu"
           className="flex items-center gap-2.5 mb-6 px-1"
         >
-          <div className="w-9 h-9 rounded-xl bg-brand flex items-center justify-center text-white font-bold">
+          <div className="w-9 h-9 rounded-xl bg-brand glow-brand flex items-center justify-center text-white font-bold">
             L
           </div>
           <div className="text-left leading-tight">
@@ -234,13 +234,17 @@ function PageContent() {
                 key={tab.id}
                 onClick={() => goToTab(tab.id)}
                 aria-current={isActive ? "page" : undefined}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all text-left ${
+                className={`group relative flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-left transition-all duration-200 press ${
                   isActive
-                    ? "bg-brand text-white shadow-sm"
-                    : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                    ? "bg-brand text-white glow-brand"
+                    : "text-muted-foreground hover:bg-accent hover:text-accent-foreground hover:translate-x-0.5"
                 }`}
               >
-                <Icon className="w-[18px] h-[18px] shrink-0" />
+                <Icon
+                  className={`w-[18px] h-[18px] shrink-0 transition-transform duration-200 ${
+                    isActive ? "scale-110" : "group-hover:scale-110"
+                  }`}
+                />
                 <span>{tab.label}</span>
               </button>
             );
@@ -248,7 +252,7 @@ function PageContent() {
         </nav>
 
         {/* Thẻ streak dưới cùng thanh bên */}
-        <div className="mt-auto rounded-xl border bg-card p-3">
+        <div className="mt-auto rounded-2xl border border-border/60 bg-brand-soft p-3">
           <div className="flex items-center gap-2">
             <Flame className="w-4 h-4 text-orange-500" />
             <span className="text-sm font-semibold">
@@ -264,7 +268,7 @@ function PageContent() {
       {/* Vùng nội dung — chừa lề trái đúng bằng thanh bên.
           Bản cũ thiếu lề này nên nội dung bị nằm đè dưới thanh bên. */}
       <div className="md:pl-60 flex flex-col min-h-screen">
-        <header className="sticky top-0 z-40 border-b bg-background/80 backdrop-blur-xl">
+        <header className="sticky top-0 z-40 border-b border-border/60 bg-background/70 backdrop-blur-xl backdrop-saturate-150">
           <div className="max-w-4xl mx-auto px-4 h-14 flex items-center justify-between gap-3">
             <div className="flex items-center gap-2.5 min-w-0">
               <button
@@ -339,7 +343,7 @@ function PageContent() {
       {/* Thanh điều hướng dưới (điện thoại): năm tab chính cộng ngăn kéo "Thêm" */}
       <nav
         aria-label="Điều hướng chính"
-        className="fixed bottom-0 left-0 right-0 z-40 border-t bg-background/90 backdrop-blur-xl md:hidden pb-[env(safe-area-inset-bottom)]"
+        className="fixed bottom-0 left-0 right-0 z-40 border-t border-border/60 bg-background/80 backdrop-blur-xl backdrop-saturate-150 md:hidden pb-[env(safe-area-inset-bottom)]"
       >
         <div className="grid grid-cols-6">
           {PRIMARY_TABS.map((tab) => (
@@ -430,13 +434,13 @@ const BottomNavButton = forwardRef<
     >
       {/* Vạch chỉ báo tab đang chọn */}
       <span
-        className={`absolute top-0 h-0.5 w-8 rounded-full transition-opacity ${
-          active ? "bg-brand opacity-100" : "opacity-0"
+        className={`absolute top-0 h-1 w-9 rounded-b-full transition-all duration-300 ${
+          active ? "bg-brand opacity-100 scale-x-100" : "opacity-0 scale-x-0"
         }`}
       />
       <Icon
-        className={`w-5 h-5 transition-colors ${
-          active ? "text-primary" : "text-muted-foreground"
+        className={`w-5 h-5 transition-all duration-200 ${
+          active ? "text-primary scale-110" : "text-muted-foreground"
         }`}
       />
       <span

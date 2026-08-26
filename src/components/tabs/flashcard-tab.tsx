@@ -207,7 +207,7 @@ export function FlashcardTab({ userId, initialDeckId }: FlashcardTabProps) {
 
   if (subscribed.length === 0) {
     return (
-      <div className="rounded-xl border bg-card p-8 text-center space-y-3">
+      <div className="rounded-xl border border-border/70 bg-card card-elevated p-8 text-center space-y-3">
         <BookOpen className="w-10 h-10 mx-auto text-muted-foreground" />
         <p className="font-medium">Bạn chưa chọn bộ từ nào</p>
         <p className="text-sm text-muted-foreground">
@@ -245,7 +245,7 @@ export function FlashcardTab({ userId, initialDeckId }: FlashcardTabProps) {
       {loadingDeck && <div className="h-56 rounded-xl bg-muted animate-pulse" />}
 
       {!loadingDeck && queue.length === 0 && (
-        <div className="rounded-xl border bg-card p-8 text-center space-y-3">
+        <div className="rounded-xl border border-border/70 bg-card card-elevated p-8 text-center space-y-3">
           <Sparkles className="w-10 h-10 mx-auto text-emerald-500" />
           <p className="font-medium">Không còn từ nào đến hạn</p>
           <p className="text-sm text-muted-foreground">
@@ -256,7 +256,7 @@ export function FlashcardTab({ userId, initialDeckId }: FlashcardTabProps) {
       )}
 
       {finished && (
-        <div className="rounded-xl border bg-card p-8 text-center space-y-4">
+        <div className="rounded-xl border border-border/70 bg-card card-elevated p-8 text-center space-y-4">
           <Sparkles className="w-10 h-10 mx-auto text-emerald-500" />
           <div>
             <p className="text-2xl font-bold">{queue.length}</p>
@@ -294,7 +294,7 @@ export function FlashcardTab({ userId, initialDeckId }: FlashcardTabProps) {
             </div>
           </div>
 
-          <div className="rounded-2xl border bg-card p-8 min-h-[240px] flex flex-col items-center justify-center text-center gap-3">
+          <div className="rounded-2xl border border-border/70 bg-card card-elevated p-8 min-h-[240px] flex flex-col items-center justify-center text-center gap-3">
             <div className="flex items-center gap-3">
               <h2 className="text-3xl font-bold">{current.word.word}</h2>
               <button

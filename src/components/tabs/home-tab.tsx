@@ -130,7 +130,7 @@ export function HomeTab({ onNavigate }: HomeTabProps) {
       </section>
 
       {/* Tiến độ lên cấp */}
-      <section className="rounded-2xl border bg-card p-5">
+      <section className="rounded-2xl border border-border/70 bg-card card-elevated p-5">
         <div className="flex items-baseline justify-between mb-3">
           <h3 className="font-semibold">Cấp {state.level}</h3>
           <span className="text-xs text-muted-foreground tabular-nums">
@@ -268,7 +268,7 @@ function StatCard({
   label: string;
 }) {
   return (
-    <div className="rounded-2xl border bg-card p-4 flex flex-col items-center gap-1.5">
+    <div className="rounded-2xl border border-border/70 bg-card card-elevated p-4 flex flex-col items-center gap-1.5">
       <div
         className={`w-9 h-9 rounded-xl flex items-center justify-center ${tone}`}
       >
@@ -296,7 +296,7 @@ function QuickAction({
   return (
     <button
       onClick={onClick}
-      className="group rounded-2xl border bg-card p-4 text-left transition-all hover:border-primary/40 hover:-translate-y-0.5 hover:card-elevated"
+      className="group rounded-2xl border border-border/70 bg-card card-elevated p-4 text-left card-hover press hover:border-primary/40"
     >
       <div className="flex items-center justify-between mb-2.5">
         <div

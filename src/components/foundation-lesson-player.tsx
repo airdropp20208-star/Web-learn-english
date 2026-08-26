@@ -74,14 +74,14 @@ export function FoundationLessonPlayer({ lesson, onExit, onFinish }: Props) {
 
       {phase === "theory" && (
         <div className="space-y-4">
-          <div className="rounded-xl border bg-card p-4 space-y-3">
+          <div className="rounded-xl border border-border/70 bg-card card-elevated p-4 space-y-3">
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
               Học xong bài này bạn sẽ
             </p>
             <p className="text-sm">{lesson.goal}</p>
           </div>
 
-          <div className="rounded-xl border bg-card p-4 space-y-3">
+          <div className="rounded-xl border border-border/70 bg-card card-elevated p-4 space-y-3">
             {lesson.theory.map((paragraph, i) => (
               <p key={i} className="text-sm leading-relaxed">
                 {paragraph}
@@ -90,7 +90,7 @@ export function FoundationLessonPlayer({ lesson, onExit, onFinish }: Props) {
           </div>
 
           {lesson.contrast && lesson.contrast.length > 0 && (
-            <div className="rounded-xl border bg-card overflow-hidden">
+            <div className="rounded-xl border border-border/70 bg-card card-elevated overflow-hidden">
               <div className="px-4 py-2 border-b bg-muted/40">
                 <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                   Đối chiếu Việt – Anh
@@ -143,7 +143,7 @@ export function FoundationLessonPlayer({ lesson, onExit, onFinish }: Props) {
 
       {phase === "done" && (
         <div className="space-y-4">
-          <div className="rounded-xl border bg-card p-6 text-center space-y-2">
+          <div className="rounded-xl border border-border/70 bg-card card-elevated p-6 text-center space-y-2">
             <p className="text-4xl font-bold">{scorePercent}%</p>
             <p className="text-sm text-muted-foreground">
               Đúng {correctCount} / {total} câu
@@ -232,7 +232,7 @@ function ExerciseView({
 
   return (
     <div className="space-y-4">
-      <div className="rounded-xl border bg-card p-4">
+      <div className="rounded-xl border border-border/70 bg-card card-elevated p-4">
         <p className="text-sm font-medium">{exercise.question}</p>
       </div>
 

@@ -61,7 +61,7 @@ export function PathTab() {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-2xl border bg-card p-5 space-y-4">
+      <div className="rounded-2xl border border-border/70 bg-card card-elevated p-5 space-y-4">
         <div className="flex items-start justify-between gap-3">
           <div>
             <h1 className="text-lg font-semibold">Lộ trình học từ số 0</h1>
@@ -207,7 +207,7 @@ export function PathTab() {
             Ghép được 10 mẫu này với 100 từ ở trên là bạn nói được việc cơ bản.
           </p>
         </div>
-        <div className="rounded-xl border bg-card divide-y">
+        <div className="rounded-xl border border-border/70 bg-card card-elevated divide-y">
           {SURVIVAL_PATTERNS.map((pattern) => (
             <div key={pattern.en} className="px-4 py-3">
               <div className="flex flex-wrap items-baseline gap-x-2">

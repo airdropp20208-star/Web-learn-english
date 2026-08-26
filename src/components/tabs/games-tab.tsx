@@ -210,7 +210,7 @@ export function GamesTab({ userId }: GamesTabProps) {
 
   if (!selectedDeck) {
     return (
-      <div className="rounded-xl border bg-card p-8 text-center space-y-2">
+      <div className="rounded-xl border border-border/70 bg-card card-elevated p-8 text-center space-y-2">
         <Gamepad2 className="w-10 h-10 mx-auto text-muted-foreground" />
         <p className="font-medium">Chưa có bộ từ nào</p>
         <p className="text-sm text-muted-foreground">
@@ -298,7 +298,7 @@ export function GamesTab({ userId }: GamesTabProps) {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-2xl border bg-card p-4 flex items-center gap-3">
+      <div className="rounded-2xl border border-border/70 bg-card card-elevated p-4 flex items-center gap-3">
         <div className="w-10 h-10 rounded-xl bg-brand flex items-center justify-center shrink-0">
           <Gamepad2 className="w-5 h-5 text-white" />
         </div>
@@ -334,7 +334,7 @@ export function GamesTab({ userId }: GamesTabProps) {
             <button
               key={game.id}
               onClick={() => startGame(game.id)}
-              className="group rounded-2xl border bg-card p-4 text-left transition-all hover:border-primary/40 hover:-translate-y-0.5 hover:card-elevated"
+              className="group rounded-2xl border border-border/70 bg-card card-elevated p-4 text-left card-hover press hover:border-primary/40"
             >
               <div className="flex items-start gap-3">
                 <div
@@ -532,7 +532,7 @@ function MatchGame({
 
   if (gameOver) {
     return (
-      <div className="rounded-2xl border bg-card p-8 text-center space-y-4">
+      <div className="rounded-2xl border border-border/70 bg-card card-elevated p-8 text-center space-y-4">
         <Trophy className="w-12 h-12 mx-auto text-amber-500" />
         <div>
           <div className="text-3xl font-bold">{score}</div>
@@ -575,7 +575,7 @@ function MatchGame({
         </div>
       </div>
 
-      <div className="rounded-xl border bg-card p-4">
+      <div className="rounded-xl border border-border/70 bg-card card-elevated p-4">
         <p className="text-sm text-muted-foreground text-center mb-4">
           Nối từ với nghĩa của nó
         </p>
@@ -724,7 +724,7 @@ function SpellingGame({
 
   if (finished) {
     return (
-      <div className="rounded-2xl border bg-card p-8 text-center space-y-4">
+      <div className="rounded-2xl border border-border/70 bg-card card-elevated p-8 text-center space-y-4">
         <div className="text-4xl">{score >= words.length / 2 ? "🎉" : "💪"}</div>
         <div>
           <div className="text-3xl font-bold">
@@ -756,7 +756,7 @@ function SpellingGame({
         </span>
       </div>
 
-      <div className="rounded-2xl border bg-card p-6 space-y-4">
+      <div className="rounded-2xl border border-border/70 bg-card card-elevated p-6 space-y-4">
         <p className="text-sm text-muted-foreground text-center">
           Nghe rồi gõ lại từ bạn nghe được
         </p>

@@ -82,7 +82,7 @@ export function StarterVocabPlayer({ onExit }: Props) {
         ))}
       </div>
 
-      <div className="rounded-2xl border bg-card p-6 space-y-4 text-center">
+      <div className="rounded-2xl border border-border/70 bg-card card-elevated p-6 space-y-4 text-center">
         <p className="text-xs text-muted-foreground">
           Từ {index + 1} / {group.words.length}
         </p>

@@ -135,7 +135,7 @@ export function TrueFalse({
 
   if (items.length === 0) {
     return (
-      <div className="rounded-2xl border bg-card p-8 text-center space-y-4 max-w-md mx-auto">
+      <div className="rounded-2xl border border-border/70 bg-card card-elevated p-8 text-center space-y-4 max-w-md mx-auto">
         <p className="text-sm text-muted-foreground">
           Bộ từ này chưa đủ từ có nghĩa để chơi.
         </p>
@@ -152,7 +152,7 @@ export function TrueFalse({
   if (finished) {
     const won = correctCount >= Math.ceil(items.length / 2);
     return (
-      <div className="rounded-2xl border bg-card p-8 text-center space-y-4 max-w-md mx-auto">
+      <div className="rounded-2xl border border-border/70 bg-card card-elevated p-8 text-center space-y-4 max-w-md mx-auto">
         <div className="text-4xl">{won ? "🎉" : "💪"}</div>
         <div>
           <div className="text-3xl font-bold">

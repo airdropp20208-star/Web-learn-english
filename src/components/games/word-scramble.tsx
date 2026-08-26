@@ -130,7 +130,7 @@ export function WordScramble({
 
   if (pool.length === 0) {
     return (
-      <div className="rounded-2xl border bg-card p-8 text-center space-y-4 max-w-md mx-auto">
+      <div className="rounded-2xl border border-border/70 bg-card card-elevated p-8 text-center space-y-4 max-w-md mx-auto">
         <p className="text-sm text-muted-foreground">
           Bộ từ này chưa có từ nào phù hợp để xếp chữ.
         </p>
@@ -146,7 +146,7 @@ export function WordScramble({
 
   if (finished) {
     return (
-      <div className="rounded-2xl border bg-card p-8 text-center space-y-4 max-w-md mx-auto">
+      <div className="rounded-2xl border border-border/70 bg-card card-elevated p-8 text-center space-y-4 max-w-md mx-auto">
         <div className="text-4xl">
           {score >= Math.ceil(pool.length / 2) ? "🎉" : "💪"}
         </div>
@@ -185,7 +185,7 @@ export function WordScramble({
         </span>
       </div>
 
-      <div className="rounded-2xl border bg-card p-6 space-y-5">
+      <div className="rounded-2xl border border-border/70 bg-card card-elevated p-6 space-y-5">
         <div className="text-center">
           <p className="text-xs text-muted-foreground mb-1">
             Xếp các chữ cái thành từ có nghĩa

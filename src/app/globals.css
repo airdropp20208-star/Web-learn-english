@@ -173,3 +173,144 @@
     transform: none;
   }
 }
+
+/* ==========================================================================
+   Lớp giao diện nâng cao.
+   Ràng buộc tự đặt: mọi thứ dưới đây chỉ dùng background-image, box-shadow,
+   filter hoặc transform — không đổi background-color. Test tương phản chế độ
+   tối đọc backgroundColor của body, nên nền vẫn đo ra đúng biến màu như cũ.
+   ========================================================================== */
+@layer utilities {
+  /* Nền một màu phẳng làm cả app trông như bản nháp. Hai quầng sáng cực mờ
+     đủ tạo chiều sâu mà không làm chữ khó đọc. */
+  .bg-mesh {
+    background-image:
+      radial-gradient(45rem 30rem at 6% -14%, oklch(0.58 0.2 278 / 11%), transparent 62%),
+      radial-gradient(40rem 28rem at 106% 2%, oklch(0.6 0.18 332 / 9%), transparent 64%);
+    background-repeat: no-repeat;
+    background-attachment: fixed;
+  }
+  /* Trên nền tối, quầng mờ 11% biến mất hẳn — phải đậm hơn mới thấy. */
+  .dark .bg-mesh {
+    background-image:
+      radial-gradient(45rem 30rem at 6% -14%, oklch(0.55 0.22 278 / 20%), transparent 62%),
+      radial-gradient(40rem 28rem at 106% 2%, oklch(0.52 0.2 332 / 15%), transparent 64%);
+  }
+
+  /* Nền dịu cho thẻ thống kê, thẻ streak — có màu thương hiệu mà không hét. */
+  .bg-brand-soft {
+    background-image: linear-gradient(
+      135deg,
+      oklch(0.58 0.21 278 / 11%) 0%,
+      oklch(0.6 0.19 332 / 8%) 100%
+    );
+  }
+
+  /* Bóng ngả tím thay vì xám. Bóng xám trên nền hơi tím trông bẩn — đây là
+     lý do bản cũ nhìn "đục" dù màu nền đã đúng. */
+  .card-elevated {
+    box-shadow:
+      0 1px 2px oklch(0.35 0.06 285 / 6%),
+      0 4px 12px -6px oklch(0.35 0.08 285 / 10%),
+      0 14px 32px -18px oklch(0.35 0.08 285 / 16%);
+  }
+  .dark .card-elevated {
+    box-shadow:
+      0 1px 2px oklch(0 0 0 / 30%),
+      0 8px 24px -12px oklch(0 0 0 / 45%);
+  }
+
+  /* Chỉ gắn vào thẻ thật sự bấm được. Thẻ tĩnh mà nhúc nhích khi rê chuột thì
+     người dùng tưởng bấm được, bấm lại không ra gì. */
+  .card-hover {
+    transition:
+      transform 0.25s cubic-bezier(0.22, 1, 0.36, 1),
+      box-shadow 0.25s cubic-bezier(0.22, 1, 0.36, 1),
+      border-color 0.25s;
+  }
+  .card-hover:hover {
+    transform: translateY(-3px);
+    border-color: oklch(0.55 0.21 278 / 35%);
+    box-shadow:
+      0 2px 4px oklch(0.35 0.06 285 / 7%),
+      0 12px 28px -12px oklch(0.45 0.14 285 / 22%);
+  }
+  .dark .card-hover:hover {
+    box-shadow:
+      0 2px 6px oklch(0 0 0 / 35%),
+      0 16px 36px -14px oklch(0.5 0.18 278 / 40%);
+  }
+
+  /* Lún nhẹ khi bấm. Trên màn cảm ứng đây là phản hồi duy nhất người dùng
+     nhận được trước khi màn hình kịp đổi. */
+  .press {
+    transition: transform 0.12s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .press:active {
+    transform: scale(0.97);
+  }
+
+  /* Quầng sáng cho mục đang chọn và nút chính — thay cho shadow xám vô hồn. */
+  .glow-brand {
+    box-shadow: 0 4px 14px -4px oklch(0.5 0.2 278 / 45%);
+  }
+
+  /* Nút chính. Tách ra utility thay vì nhét gradient vào chuỗi cva để chỗ
+     ghi đè className không phải đấu với một chuỗi arbitrary value dài. */
+  .btn-brand {
+    background-image: linear-gradient(
+      135deg,
+      oklch(0.56 0.21 278) 0%,
+      oklch(0.58 0.2 315) 100%
+    );
+    color: #fff;
+    box-shadow: 0 2px 8px -2px oklch(0.5 0.2 278 / 42%);
+  }
+  .btn-brand:hover {
+    filter: brightness(1.07);
+    box-shadow: 0 6px 16px -4px oklch(0.5 0.2 278 / 55%);
+  }
+  .btn-brand:disabled:hover {
+    filter: none;
+    box-shadow: 0 2px 8px -2px oklch(0.5 0.2 278 / 42%);
+  }
+}
+
+@layer base {
+  /* Thanh cuộn mặc định của Chrome trên Windows rộng và xám bê tông, cắt
+     ngang mọi nỗ lực làm nền dịu. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+  ::-webkit-scrollbar {
+    width: 11px;
+    height: 11px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 9999px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--muted-foreground);
+    background-clip: content-box;
+  }
+}
+
+/* Người bật "giảm chuyển động" trong hệ điều hành thường vì thật sự chóng
+   mặt khi nhìn vật thể trượt, không phải vì thích tối giản. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
