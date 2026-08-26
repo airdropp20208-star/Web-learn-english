@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -16,7 +16,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
-import { Sparkles, Save, FileText, AlertCircle, Volume2 } from "lucide-react";
+import { Sparkles, Save, FileText, AlertCircle } from "lucide-react";
+import { PronounceButton } from "@/components/pronounce-button";
 import type { AnalyzeResponse, CEFRLevel, TextDTO, VocabItemDTO } from "@/lib/types";
 import { createText, saveVocabItem, getTexts } from "@/lib/storage";
 
@@ -40,24 +41,26 @@ export function ReadTab({ userId }: ReadTabProps) {
   const [savedText, setSavedText] = useState<TextDTO | null>(null);
   const [savedVocabIds, setSavedVocabIds] = useState<Set<string>>(new Set());
   const [history, setHistory] = useState<TextDTO[]>([]);
-  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [loadingHistory, setLoadingHistory] = useState(true);
   const [featureError, setFeatureError] = useState<string | null>(null);
   const [viCache, setViCache] = useState<Record<string, string>>({});
 
-  async function loadHistory() {
-    setLoadingHistory(true);
+  // Không bật lại spinner ở đây: hàm này còn được gọi để làm mới danh sách
+  // sau khi lưu một bài đọc, và cho danh sách biến mất một nhịp chỉ để hiện
+  // ô xám thì tệ hơn là để nó tự cập nhật. Lần nạp đầu đã có `loadingHistory`
+  // khởi tạo `true` lo liệu.
+  const loadHistory = useCallback(async () => {
     try {
       const texts = await getTexts(userId);
       setHistory(texts);
     } finally {
       setLoadingHistory(false);
     }
-  }
-
-  // Load history on mount
-  useEffect(() => {
-    loadHistory();
   }, [userId]);
+
+  useEffect(() => {
+    loadHistory().catch(() => toast.error("Không tải được lịch sử bài đọc."));
+  }, [loadHistory]);
 
   async function handleAnalyze() {
     if (!rawText.trim()) {
@@ -204,20 +207,12 @@ export function ReadTab({ userId }: ReadTabProps) {
               <div className="flex items-center justify-between">
                 <div>
                   <div className="font-semibold">{w.word}</div>
-                  {(w as any).ipa && (
+                  {w.ipa && (
                     <div className="flex items-center gap-2 mt-0.5">
                       <span className="text-xs text-muted-foreground font-mono">
-                        {(w as any).ipa}
+                        {w.ipa}
                       </span>
-                      {(w as any).audioUrl && (
-                        <button
-                          onClick={() => new Audio((w as any).audioUrl).play()}
-                          className="text-muted-foreground hover:text-primary"
-                          title="Play pronunciation"
-                        >
-                          <Volume2 className="w-3.5 h-3.5" />
-                        </button>
-                      )}
+                      <PronounceButton word={w.word} audioUrl={w.audioUrl} />
                     </div>
                   )}
                   <Badge variant="outline" className={`mt-1 ${CEFR_COLOR[w.cefrLevel]}`}>
@@ -385,6 +380,9 @@ export function ReadTab({ userId }: ReadTabProps) {
                           cefrLevel: t.cefrLevel,
                           summary: t.summary ?? "",
                           highlightedWords: [],
+                          // Bài đọc lưu từ trước có thể chưa có điểm dễ đọc;
+                          // `null` là "chưa tính", khác với "đã tính ra 0".
+                          readability: t.readability ?? null,
                         });
                       }}
                     >

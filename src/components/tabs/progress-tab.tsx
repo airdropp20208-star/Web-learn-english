@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -44,28 +44,30 @@ export function ProgressTab({ userId }: ProgressTabProps) {
   const [memoryItems, setMemoryItems] = useState<MemoryItemDTO[]>([]);
   const [advancing, setAdvancing] = useState(false);
 
-  async function loadAll() {
-    setLoading(true);
-    const [prog, items] = await Promise.all([
-      ensureUserProgress(userId),
-      getMemoryItems(userId),
-    ]);
-    setProgress(prog);
-    setMemoryItems(items);
+  // `loading` đã khởi tạo `true` cho lần nạp đầu; hàm này còn được gọi lại
+  // sau khi lên hạng, và lúc đó thay cả trang bằng skeleton là thừa.
+  const loadAll = useCallback(async () => {
+    try {
+      const [prog, items] = await Promise.all([
+        ensureUserProgress(userId),
+        getMemoryItems(userId),
+      ]);
+      setProgress(prog);
+      setMemoryItems(items);
 
-    // Recompute tier mastery score
-    const score = computeTierMasteryScore(items, prog.currentTier);
-    if (Math.abs(score - prog.tierMasteryScore) > 0.01) {
-      await updateTierMasteryScore(userId, score);
-      setProgress({ ...prog, tierMasteryScore: score });
+      const score = computeTierMasteryScore(items, prog.currentTier);
+      if (Math.abs(score - prog.tierMasteryScore) > 0.01) {
+        await updateTierMasteryScore(userId, score);
+        setProgress({ ...prog, tierMasteryScore: score });
+      }
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
-  }
+  }, [userId]);
 
   useEffect(() => {
-    loadAll();
-     
-  }, [userId]);
+    loadAll().catch(() => toast.error("Không tải được dữ liệu tiến độ."));
+  }, [loadAll]);
 
   const tierCheck = useMemo(() => {
     if (!progress) return null;

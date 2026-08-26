@@ -20,38 +20,36 @@ import {
   getLevelProgress,
   DAILY_GOAL,
   award,
-  type GamificationState,
 } from "@/lib/gamification";
+import {
+  useGamification,
+  useGamificationReady,
+  useDailyProgress,
+} from "@/hooks/use-gamification";
 import { getNoActivityComment, getDailyGoalDoneComment } from "@/lib/humor";
 
 interface HomeTabProps {
   onNavigate: (tab: string) => void;
 }
 
-interface DailyProgress {
-  current: number;
-  goal: number;
-  percent: number;
-}
-
 export function HomeTab({ onNavigate }: HomeTabProps) {
-  // null cho tới khi đọc xong localStorage — tránh lệch nội dung khi hydrate
-  const [state, setState] = useState<GamificationState | null>(null);
-  const [dailyProgress, setDailyProgress] = useState<DailyProgress | null>(null);
+  const state = useGamification();
+  const dailyProgress = useDailyProgress();
+  const ready = useGamificationReady();
 
+  // Điểm danh hằng ngày là tác dụng phụ thật (ghi localStorage + hiện huy
+  // hiệu), nên vẫn thuộc về effect — nhưng không còn setState đồng bộ ở đây:
+  // award() tự báo cho store và mọi nơi đang xem sẽ vẽ lại.
   useEffect(() => {
     const today = new Date().toISOString().split("T")[0];
-    if (getState().lastStudyDate !== today) {
-      const { newAchievements } = award("daily-login");
-      newAchievements.forEach((a) => {
-        toast.success(`🏅 ${a.name}: ${a.description}`);
-      });
-    }
-    setState(getState());
-    setDailyProgress(getDailyProgress());
+    if (getState().lastStudyDate === today) return;
+    const { newAchievements } = award("daily-login");
+    newAchievements.forEach((a) => {
+      toast.success(`🏅 ${a.name}: ${a.description}`);
+    });
   }, []);
 
-  if (!state || !dailyProgress) {
+  if (!ready) {
     return (
       <div className="space-y-5">
         <div className="h-44 rounded-2xl bg-muted animate-pulse" />

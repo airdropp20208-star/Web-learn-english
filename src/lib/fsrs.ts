@@ -7,15 +7,25 @@ import {
   createEmptyCard,
   Rating,
   type Card,
-  type RecordLogItem,
+  type Grade,
+  type ReviewLog,
 } from "ts-fsrs";
+import type { FSRSCardState } from "./types";
 
 // Configure FSRS with default parameters (FSRS-6)
 // enable_fuzz: true adds ±10% randomness to scheduling for natural variation
 const params = generatorParameters({ enable_fuzz: true });
 const f = fsrs(params);
 
-export type ReviewRating = Rating; // 1=Manual, 2=Again, 3=Hard, 4=Good, 5=Easy
+/**
+ * Mức đánh giá một lần ôn. Cố tình dùng `Grade` (Again | Hard | Good | Easy)
+ * chứ không phải `Rating`: `Rating.Manual` không phải một câu trả lời của
+ * người học, và cho phép nó lọt vào sẽ làm `f.next()` ném lỗi.
+ *
+ * Giá trị thật của enum: Manual=0, Again=1, Hard=2, Good=3, Easy=4.
+ * Luôn dùng tên enum (`Rating.Good`), đừng gõ số trần.
+ */
+export type ReviewRating = Grade;
 
 export interface FSRSState {
   card: Card; // ts-fsrs card object
@@ -27,7 +37,7 @@ export interface FSRSState {
  */
 export function createNewCard(): Card {
   // createEmptyCard is a standalone export from ts-fsrs
-  return createEmptyCard(new Date()) as Card;
+  return createEmptyCard(new Date());
 }
 
 /**
@@ -37,29 +47,21 @@ export function createNewCard(): Card {
 export function reviewCard(
   card: Card,
   rating: ReviewRating
-): { card: Card; log: RecordLogItem } {
-  const now = new Date();
-  const result = f.repeat(card, now) as Record<Rating, { card: Card; log: RecordLogItem }>;
-  const { card: updatedCard, log } = result[rating];
-  return { card: updatedCard, log };
+): { card: Card; log: ReviewLog } {
+  return f.next(card, new Date(), rating);
 }
 
 /**
  * Get a preview of scheduling for all 4 ratings (for UI display).
- * Defensive: optional chaining + fallbacks so an unexpected ts-fsrs result
- * shape never crashes the Review tab.
  */
 export function previewSchedule(card: Card): Record<
   "again" | "hard" | "good" | "easy",
   { intervalDays: number; dueDate: Date }
 > {
   const now = new Date();
-  const result = f.repeat(card, now) as Record<
-    number,
-    { card: Card; log: RecordLogItem } | undefined
-  >;
+  const result = f.repeat(card, now);
 
-  const mapping: Array<["again" | "hard" | "good" | "easy", number]> = [
+  const mapping: Array<["again" | "hard" | "good" | "easy", Grade]> = [
     ["again", Rating.Again],
     ["hard", Rating.Hard],
     ["good", Rating.Good],
@@ -71,11 +73,11 @@ export function previewSchedule(card: Card): Record<
     { intervalDays: number; dueDate: Date }
   >;
 
-  for (const [key, ratingValue] of mapping) {
-    const item = result[ratingValue];
+  for (const [key, grade] of mapping) {
+    const item = result[grade];
     preview[key] = {
-      intervalDays: item?.card?.scheduled_days ?? 0,
-      dueDate: item?.card?.due ? new Date(item.card.due) : now,
+      intervalDays: item.card.scheduled_days,
+      dueDate: new Date(item.card.due),
     };
   }
 
@@ -83,41 +85,63 @@ export function previewSchedule(card: Card): Record<
 }
 
 /**
- * Serialize FSRS card to JSON for localStorage storage.
+ * Chuyển Card của ts-fsrs sang dạng lưu trữ phẳng (ngày tháng thành chuỗi ISO).
+ *
+ * `learning_steps` BẮT BUỘC phải có mặt: đó là vị trí hiện tại của thẻ trong
+ * chuỗi bước học/học lại. Bỏ sót nó thì mỗi lần lưu rồi đọc lại, thẻ đang ở
+ * giữa chừng sẽ bị kéo về bước 0 và lịch ôn tính sai.
  */
-export function serializeCard(card: Card): string {
-  return JSON.stringify({
+export function toCardState(card: Card): FSRSCardState {
+  return {
     due: card.due instanceof Date ? card.due.toISOString() : card.due,
     stability: card.stability,
     difficulty: card.difficulty,
     elapsed_days: card.elapsed_days,
     scheduled_days: card.scheduled_days,
+    learning_steps: card.learning_steps ?? 0,
     reps: card.reps,
     lapses: card.lapses,
     state: card.state,
     last_review:
       card.last_review instanceof Date
         ? card.last_review.toISOString()
-        : card.last_review,
-  });
+        : (card.last_review ?? null),
+  };
+}
+
+/**
+ * Dựng lại Card của ts-fsrs từ dạng lưu trữ phẳng.
+ *
+ * Dữ liệu cũ (lưu trước khi sửa lỗi mất `learning_steps`) không có trường này
+ * nên mặc định về 0 — thẻ chỉ mất đúng vị trí bước học, không mất cả thẻ.
+ */
+export function fromCardState(state: FSRSCardState): Card {
+  return {
+    due: state.due ? new Date(state.due) : new Date(),
+    stability: state.stability ?? 0,
+    difficulty: state.difficulty ?? 0,
+    elapsed_days: state.elapsed_days ?? 0,
+    scheduled_days: state.scheduled_days ?? 0,
+    learning_steps: state.learning_steps ?? 0,
+    reps: state.reps ?? 0,
+    lapses: state.lapses ?? 0,
+    state: state.state ?? 0,
+    last_review: state.last_review ? new Date(state.last_review) : undefined,
+  } as Card;
+}
+
+/**
+ * Serialize FSRS card to JSON for localStorage storage.
+ */
+export function serializeCard(card: Card): string {
+  return JSON.stringify(toCardState(card));
 }
 
 /**
  * Deserialize FSRS card from JSON.
  */
 export function deserializeCard(json: string): Card {
-  const obj = JSON.parse(json);
-  return {
-    due: obj.due ? new Date(obj.due) : new Date(),
-    stability: obj.stability ?? 0,
-    difficulty: obj.difficulty ?? 0,
-    elapsed_days: obj.elapsed_days ?? 0,
-    scheduled_days: obj.scheduled_days ?? 0,
-    reps: obj.reps ?? 0,
-    lapses: obj.lapses ?? 0,
-    state: obj.state ?? 0,
-    last_review: obj.last_review ? new Date(obj.last_review) : undefined,
-  } as Card;
+  return fromCardState(JSON.parse(json) as FSRSCardState);
 }
 
 /**

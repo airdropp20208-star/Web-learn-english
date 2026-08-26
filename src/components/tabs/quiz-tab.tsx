@@ -27,6 +27,7 @@ import { ListChecks, CheckCircle2, XCircle, RotateCcw, AlertCircle } from "lucid
 import type { QuizResponse, TextDTO, VocabItemDTO, QuizType } from "@/lib/types";
 import { getTexts, getVocabItems, saveQuizQuestions, getMemoryItems, reviewMemoryItem } from "@/lib/storage";
 import type { ReviewRating } from "@/lib/fsrs";
+import { Rating } from "ts-fsrs";
 import { award } from "@/lib/gamification";
 import { getReviewComment } from "@/lib/humor";
 
@@ -166,9 +167,13 @@ export function QuizTab({ userId }: QuizTabProps) {
       if (relatedMemoryId) {
         const memItem = memoryItems.find((m) => m.id === relatedMemoryId);
         if (memItem) {
-          // FSRS: Again (2) if wrong, Good (4) if correct
-          const rating: ReviewRating = correct ? 4 : 2;
-          await reviewMemoryItem(relatedMemoryId, rating);
+          // Giá trị enum thật: Again=1, Hard=2, Good=3, Easy=4. Bản cũ gõ
+          // `correct ? 4 : 2` theo một comment sai — nghĩa là trả lời đúng
+          // được chấm "Easy" (giãn lịch quá tay) còn trả lời SAI chỉ bị chấm
+          // "Hard", nên FSRS không bao giờ ghi nhận đó là một lần quên và thẻ
+          // vẫn tiếp tục giãn ra.
+          const rating: ReviewRating = correct ? Rating.Good : Rating.Again;
+          await reviewMemoryItem(userId, relatedMemoryId, rating);
         }
       }
     }

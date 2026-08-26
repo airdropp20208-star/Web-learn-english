@@ -13,7 +13,8 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Progress } from "@/components/ui/progress";
-import { NotebookPen, Search, Volume2 } from "lucide-react";
+import { NotebookPen, Search } from "lucide-react";
+import { PronounceButton } from "@/components/pronounce-button";
 import type { VocabItemDTO, MemoryItemDTO, CEFRLevel } from "@/lib/types";
 import { getVocabItems, getMemoryItems } from "@/lib/storage";
 import { estimateRecallProbability } from "@/lib/mastery-engine";
@@ -185,15 +186,11 @@ export function VocabTab({ userId }: VocabTabProps) {
                             {vocab.ipa}
                           </span>
                         )}
-                        {vocab.audioUrl && (
-                          <button
-                            onClick={() => new Audio(vocab.audioUrl).play()}
-                            className="ml-1 text-muted-foreground hover:text-primary"
-                            title="Play pronunciation"
-                          >
-                            <Volume2 className="w-3.5 h-3.5" />
-                          </button>
-                        )}
+                        <PronounceButton
+                          word={vocab.word}
+                          audioUrl={vocab.audioUrl}
+                          className="ml-1"
+                        />
                         <Badge
                           variant="outline"
                           className={CEFR_COLOR[vocab.cefrLevel]}

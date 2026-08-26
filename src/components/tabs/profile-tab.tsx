@@ -12,12 +12,8 @@ import {
   Brain,
   Gamepad2,
 } from "lucide-react";
-import {
-  getState,
-  getLevelProgress,
-  ACHIEVEMENTS,
-  type GamificationState,
-} from "@/lib/gamification";
+import { getLevelProgress, ACHIEVEMENTS } from "@/lib/gamification";
+import { useGamification } from "@/hooks/use-gamification";
 import { getVocabItems, getMemoryItems, getTexts } from "@/lib/storage";
 
 interface ProfileTabProps {
@@ -26,8 +22,7 @@ interface ProfileTabProps {
 
 export function ProfileTab({ userId }: ProfileTabProps) {
   const [loading, setLoading] = useState(true);
-  // null cho tới khi đọc xong localStorage — tránh lệch giữa server và client
-  const [state, setState] = useState<GamificationState | null>(null);
+  const state = useGamification();
   const [vocabCount, setVocabCount] = useState(0);
   const [reviewCount, setReviewCount] = useState(0);
   const [textCount, setTextCount] = useState(0);
@@ -41,7 +36,6 @@ export function ProfileTab({ userId }: ProfileTabProps) {
         getTexts(userId),
       ]);
       if (cancelled) return;
-      setState(getState());
       setVocabCount(v.length);
       setReviewCount(m.filter((x) => x.card.reps > 0).length);
       setTextCount(t.length);
@@ -52,7 +46,7 @@ export function ProfileTab({ userId }: ProfileTabProps) {
     };
   }, [userId]);
 
-  if (loading || !state) {
+  if (loading) {
     return <Skeleton className="h-96 w-full" />;
   }
 

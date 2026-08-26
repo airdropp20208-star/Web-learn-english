@@ -177,14 +177,21 @@ export function WordBattle({
     ]
   );
 
-  // Đồng hồ từng câu
+  // Đồng hồ từng câu.
+  //
+  // Việc nộp câu trắng khi hết giờ nằm TRONG callback của setTimeout, không
+  // nằm ở thân effect: nhịp đếm cuối cùng vừa đưa đồng hồ về 0 vừa nộp bài,
+  // thay vì hạ về 0 rồi chờ effect chạy lại mới nộp.
   useEffect(() => {
     if (phase !== "playing" || feedback || !current) return;
-    if (timeLeft <= 0) {
-      void submitAnswer(null);
-      return;
-    }
-    const timer = window.setTimeout(() => setTimeLeft((t) => t - 1), 1000);
+    const timer = window.setTimeout(() => {
+      if (timeLeft <= 1) {
+        setTimeLeft(0);
+        void submitAnswer(null);
+      } else {
+        setTimeLeft((t) => t - 1);
+      }
+    }, 1000);
     return () => window.clearTimeout(timer);
   }, [timeLeft, phase, feedback, current, submitAnswer]);
 

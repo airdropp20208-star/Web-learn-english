@@ -32,7 +32,10 @@ export function buildReviewSession(
     })
     .slice(0, maxSize);
 
-  return interleave(due);
+  // interleave làm việc trên phần tử phiên ôn ({ item }), không phải trên
+  // MemoryItemDTO trần — thiếu bước bọc này thì x.item là undefined và cả
+  // tính năng Ôn tập ném TypeError ngay khi có một thẻ tới hạn.
+  return interleave(due.map((item) => ({ item })));
 }
 
 /**

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import {
   BookOpen,
   Brain,
@@ -44,9 +44,15 @@ export function StudyTab({
 }: StudyTabProps) {
   const [mode, setMode] = useState<StudyMode>(initialMode);
 
-  useEffect(() => {
+  // Khi tab khác điều hướng sang đây kèm chế độ chỉ định (ví dụ "Ôn tập ngay"),
+  // `initialMode` đổi và `mode` phải theo. Chỉnh state ngay trong lúc render
+  // theo đúng cách React khuyến nghị, thay vì dùng effect — effect sẽ vẽ thừa
+  // một khung hình với chế độ cũ rồi mới nhảy sang chế độ mới.
+  const [prevInitialMode, setPrevInitialMode] = useState(initialMode);
+  if (prevInitialMode !== initialMode) {
+    setPrevInitialMode(initialMode);
     setMode(initialMode);
-  }, [initialMode]);
+  }
 
   return (
     <div className="space-y-4">
