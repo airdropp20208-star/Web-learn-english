@@ -7,13 +7,15 @@ import { test, expect, type Page, type ConsoleMessage } from "@playwright/test";
  */
 
 const TABS = [
-  { label: "Trang chủ", short: "Nhà" },
-  { label: "Lộ trình", short: "Lộ trình" },
-  { label: "Bộ từ", short: "Bộ từ" },
-  { label: "Học", short: "Học" },
-  { label: "Thư viện", short: "Đọc" },
-  { label: "Game", short: "Game" },
-  { label: "Hồ sơ", short: "Tôi" },
+  { label: "Trang chủ", short: "Nhà", primary: true },
+  { label: "Lộ trình", short: "Lộ trình", primary: true },
+  { label: "Bộ từ", short: "Bộ từ", primary: true },
+  { label: "Học", short: "Học", primary: true },
+  { label: "Game", short: "Game", primary: true },
+  { label: "Thư viện", short: "Đọc", primary: false },
+  { label: "Tiến độ", short: "Tiến độ", primary: false },
+  { label: "Luyện nói", short: "Nói", primary: false },
+  { label: "Hồ sơ", short: "Tôi", primary: false },
 ] as const;
 
 /**
@@ -49,8 +51,8 @@ function collectErrors(page: Page): string[] {
  * chậm hoặc lần biên dịch đầu của dev server, lần click đầu có thể rơi vào
  * lúc handler chưa gắn.
  *
- * Ghi nhận cho Phase 4: `showLanding` luôn khởi tạo `true` và không được lưu,
- * nên người dùng phải bấm lại nút này ở MỌI lần vào app.
+ * Trạng thái này giờ được nhớ trong localStorage, nhưng mỗi test chạy trong
+ * một context sạch nên landing vẫn hiện ở lần đầu — đúng như người dùng mới.
  */
 async function enterApp(page: Page) {
   await page.goto("/");
@@ -61,6 +63,33 @@ async function enterApp(page: Page) {
     await cta.click({ timeout: 2_000 });
     await expect(page.getByRole("banner")).toBeVisible({ timeout: 2_000 });
   }).toPass({ timeout: 45_000 });
+}
+
+/**
+ * Mở một tab. Trên điện thoại chỉ năm tab chính nằm trên thanh dưới; bốn tab
+ * còn lại phải đi qua ngăn kéo "Thêm".
+ */
+async function moTab(page: Page, tab: (typeof TABS)[number], isMobile: boolean) {
+  if (!isMobile) {
+    await page
+      .locator("aside")
+      .getByRole("button", { name: tab.label, exact: true })
+      .click();
+  } else if (tab.primary) {
+    await page
+      .locator("nav.fixed.bottom-0")
+      .getByRole("button", { name: tab.short, exact: true })
+      .click();
+  } else {
+    await page.getByRole("button", { name: "Mở thêm mục" }).click();
+    // Nút trong ngăn kéo mang cả dòng mô tả trong tên trợ năng, nên khớp theo
+    // tiền tố thay vì so bằng.
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: new RegExp("^" + tab.label) })
+      .click();
+  }
+  await expect(page.getByRole("banner").getByRole("heading")).toHaveText(tab.label);
 }
 
 test.describe("Smoke — toàn bộ tab", () => {
@@ -81,18 +110,8 @@ test.describe("Smoke — toàn bộ tab", () => {
     }) => {
       const errors = collectErrors(page);
       await enterApp(page);
+      await moTab(page, tab, !!isMobile);
 
-      const nav = isMobile
-        ? page.locator("nav.fixed.bottom-0")
-        : page.locator("aside");
-      await nav
-        .getByRole("button", { name: isMobile ? tab.short : tab.label, exact: true })
-        .click();
-
-      // Tiêu đề ở header phải đổi theo tab đang chọn
-      await expect(page.getByRole("banner").getByRole("heading")).toHaveText(
-        tab.label
-      );
       // Vùng nội dung phải có gì đó, không được trắng trơn
       await expect(page.getByRole("main")).not.toBeEmpty();
 
@@ -100,24 +119,15 @@ test.describe("Smoke — toàn bộ tab", () => {
     });
   }
 
-  test("đi tuần tự qua cả 7 tab không tích luỹ lỗi", async ({
+  test("đi tuần tự qua cả chín tab không tích luỹ lỗi", async ({
     page,
     isMobile,
   }) => {
     const errors = collectErrors(page);
     await enterApp(page);
 
-    const nav = isMobile
-      ? page.locator("nav.fixed.bottom-0")
-      : page.locator("aside");
-
     for (const tab of TABS) {
-      await nav
-        .getByRole("button", { name: isMobile ? tab.short : tab.label, exact: true })
-        .click();
-      await expect(page.getByRole("banner").getByRole("heading")).toHaveText(
-        tab.label
-      );
+      await moTab(page, tab, !!isMobile);
     }
 
     expect(errors, errors.join("\n")).toEqual([]);
