@@ -1,19 +1,21 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Lock, Check, Play, Sparkles, RotateCcw } from "lucide-react";
 import { FOUNDATION_LESSONS } from "@/lib/foundation-lessons";
 import { STARTER_WORD_COUNT, SURVIVAL_PATTERNS } from "@/lib/starter-vocab";
 import {
   foundationPercent,
-  getPathProgress,
   isLessonUnlocked,
   isStarterVocabUnlocked,
   nextLessonId,
   recordLessonResult,
   resetPathProgress,
-  type PathProgress,
 } from "@/lib/path-progress";
+import {
+  usePathProgress,
+  usePathProgressReady,
+} from "@/hooks/use-path-progress";
 import { FoundationLessonPlayer } from "@/components/foundation-lesson-player";
 import { StarterVocabPlayer } from "@/components/starter-vocab-player";
 
@@ -21,14 +23,12 @@ type View = { mode: "list" } | { mode: "lesson"; id: string } | { mode: "starter
 
 export function PathTab() {
   const [view, setView] = useState<View>({ mode: "list" });
-  // null cho tới khi đọc xong localStorage — tránh lệch giữa server và client.
-  const [progress, setProgress] = useState<PathProgress | null>(null);
+  // Đọc qua store: mọi hàm ghi của path-progress đều tự báo lại, nên không
+  // cần `setProgress(...)` thủ công sau mỗi thao tác nữa.
+  const progress = usePathProgress();
+  const ready = usePathProgressReady();
 
-  useEffect(() => {
-    setProgress(getPathProgress());
-  }, []);
-
-  if (!progress) {
+  if (!ready) {
     return <div className="h-40 rounded-xl bg-muted animate-pulse" />;
   }
 
@@ -41,23 +41,17 @@ export function PathTab() {
     return (
       <FoundationLessonPlayer
         lesson={lesson}
-        onExit={() => {
-          setProgress(getPathProgress());
-          setView({ mode: "list" });
+        onExit={() => setView({ mode: "list" })}
+        onFinish={(score) => {
+          recordLessonResult(lesson.id, score);
         }}
-        onFinish={(score) => setProgress(recordLessonResult(lesson.id, score))}
       />
     );
   }
 
   if (view.mode === "starter") {
     return (
-      <StarterVocabPlayer
-        onExit={() => {
-          setProgress(getPathProgress());
-          setView({ mode: "list" });
-        }}
-      />
+      <StarterVocabPlayer onExit={() => setView({ mode: "list" })} />
     );
   }
 
@@ -79,7 +73,7 @@ export function PathTab() {
           <button
             onClick={() => {
               if (window.confirm("Xoá toàn bộ tiến độ lộ trình?")) {
-                setProgress(resetPathProgress());
+                resetPathProgress();
               }
             }}
             className="p-2 rounded-lg hover:bg-accent text-muted-foreground shrink-0"

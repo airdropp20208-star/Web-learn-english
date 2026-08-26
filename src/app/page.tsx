@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, Suspense, useEffect } from "react";
+import { useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   Home,
@@ -22,8 +22,9 @@ import { LibraryTab } from "@/components/tabs/library-tab";
 import { GamesTab } from "@/components/tabs/games-tab";
 import { ProfileTab } from "@/components/tabs/profile-tab";
 import { LandingPage } from "@/components/landing-page";
-import { DEFAULT_USER_ID } from "@/lib/auth";
-import { getState, type GamificationState } from "@/lib/gamification";
+import { UserMenu } from "@/components/user-menu";
+import { useGamification } from "@/hooks/use-gamification";
+import { useCurrentUserId } from "@/hooks/use-current-user-id";
 
 type TabId =
   | "home"
@@ -53,8 +54,6 @@ const TABS: TabDef[] = [
   { id: "profile", label: "Hồ sơ", shortLabel: "Tôi", icon: User },
 ];
 
-const userId = DEFAULT_USER_ID;
-
 export default function Page() {
   return (
     <Suspense fallback={<LoadingScreen />}>
@@ -73,28 +72,25 @@ function LoadingScreen() {
 
 function PageContent() {
   const searchParams = useSearchParams();
-  const [showLanding, setShowLanding] = useState(true);
+  // Id thật khi đã đăng nhập, id khách khi chưa. Trước đây đây là hằng số ở
+  // cấp module nên hai tài khoản trên cùng trình duyệt dùng chung dữ liệu.
+  const userId = useCurrentUserId();
+  // `?app=1` cho phép mở thẳng vào app (link chia sẻ, e2e). Trước đây một
+  // effect đọc query rồi setState — thừa một vòng vẽ và người dùng thấy nháy
+  // màn landing. Giờ suy ra ngay lúc vẽ; `landingOverride` chỉ ghi đè khi
+  // người dùng tự bấm vào/ra.
+  const openAppFromUrl = searchParams.get("app") === "1";
+  const [landingOverride, setLandingOverride] = useState<boolean | null>(null);
+  const showLanding = landingOverride ?? !openAppFromUrl;
+  const setShowLanding = setLandingOverride;
   const [activeTab, setActiveTab] = useState<TabId>("home");
   const [studyMode, setStudyMode] = useState<StudyModeId>("flashcard");
   const [initialDeckId, setInitialDeckId] = useState<string | undefined>(
     undefined
   );
-  // null cho tới khi đọc xong localStorage — tránh lệch nội dung khi hydrate
-  const [gamificationState, setGamificationState] =
-    useState<GamificationState | null>(null);
-
-  useEffect(() => {
-    if (searchParams.get("app") === "1") {
-      setShowLanding(false);
-    }
-  }, [searchParams]);
-
-  useEffect(() => {
-    const update = () => setGamificationState(getState());
-    update();
-    const interval = setInterval(update, 5000);
-    return () => clearInterval(interval);
-  }, []);
+  // Đọc từ store: tự vẽ lại ngay khi award() cộng điểm, và `useSyncExternalStore`
+  // lo phần hydrate nên không lệch nội dung giữa server và client.
+  const gamificationState = useGamification();
 
   function handleNavigate(tab: string, deckId?: string) {
     if (tab.startsWith("study:")) {
@@ -164,7 +160,7 @@ function PageContent() {
           <div className="flex items-center gap-2">
             <Flame className="w-4 h-4 text-orange-500" />
             <span className="text-sm font-semibold">
-              {gamificationState?.streak ?? 0} ngày liên tiếp
+              {gamificationState.streak} ngày liên tiếp
             </span>
           </div>
           <p className="text-[11px] text-muted-foreground mt-1">
@@ -188,22 +184,26 @@ function PageContent() {
               <h1 className="font-semibold truncate">{activeLabel}</h1>
             </div>
 
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+              {/* Ở 360px, ba viên chỉ số cộng menu tài khoản là tràn ngang. Level
+                  và chuỗi ngày vẫn thấy được ở tab Hồ sơ, nên ẩn bớt ở màn hẹp
+                  và luôn giữ lại số xu. */}
               <Pill
                 icon={<Sparkles className="w-3.5 h-3.5" />}
-                value={`Lv ${gamificationState?.level ?? 1}`}
-                className="bg-primary/10 text-primary"
+                value={`Lv ${gamificationState.level}`}
+                className="hidden xs:inline-flex bg-primary/10 text-primary"
               />
               <Pill
                 icon={<Coins className="w-3.5 h-3.5" />}
-                value={gamificationState?.coins ?? 0}
+                value={gamificationState.coins}
                 className="bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-400"
               />
               <Pill
                 icon={<Flame className="w-3.5 h-3.5" />}
-                value={gamificationState?.streak ?? 0}
-                className="bg-orange-100 text-orange-700 dark:bg-orange-950/60 dark:text-orange-400"
+                value={gamificationState.streak}
+                className="hidden sm:inline-flex bg-orange-100 text-orange-700 dark:bg-orange-950/60 dark:text-orange-400"
               />
+              <UserMenu />
             </div>
           </div>
         </header>

@@ -40,13 +40,19 @@ export function TrueFalse({
   cardStates,
   onExit,
 }: TrueFalseProps) {
-  const statesRef = useRef(cardStates);
+  // Ảnh chụp trạng thái thẻ lúc bắt đầu ván, cố định tới hết ván.
+  //
+  // Bản cũ dùng `useRef(cardStates)` rồi đọc `.current` ngay trong thân
+  // component — đọc ref lúc vẽ là thứ React Compiler không đảm bảo được. Ref
+  // này lại chẳng bao giờ được cập nhật, nên nó chỉ đang làm đúng việc mà
+  // `useState` đã làm sẵn: giữ nguyên giá trị đầu tiên.
+  const [initialStates] = useState(cardStates);
 
   // Sinh toàn bộ câu hỏi một lần khi vào ván
   const [items] = useState<TrueFalseItem[]>(() => {
     const usable = words.filter((w) => meaningOf(w));
     if (usable.length < 4) return [];
-    const picked = pickWords(usable, statesRef.current, ITEM_COUNT);
+    const picked = pickWords(usable, initialStates, ITEM_COUNT);
     return picked.map((word) => {
       const own = meaningOf(word) as string;
       const useOwn = Math.random() < 0.5;
@@ -70,16 +76,13 @@ export function TrueFalse({
   const [correctCount, setCorrectCount] = useState(0);
   const [streak, setStreak] = useState(0);
   const [timeLeft, setTimeLeft] = useState(TOTAL_SECONDS);
-  const [finished, setFinished] = useState(false);
+  const [endedEarly, setEndedEarly] = useState(false);
+  const finished = endedEarly || timeLeft <= 0;
 
   const current = items[idx];
 
   useEffect(() => {
     if (finished) return;
-    if (timeLeft <= 0) {
-      setFinished(true);
-      return;
-    }
     const timer = window.setTimeout(() => setTimeLeft((t) => t - 1), 1000);
     return () => window.clearTimeout(timer);
   }, [timeLeft, finished]);
@@ -114,7 +117,7 @@ export function TrueFalse({
         deckId,
         current.word,
         correct,
-        statesRef.current[current.word.word]
+        initialStates[current.word.word]
       );
     }
 
@@ -122,7 +125,7 @@ export function TrueFalse({
       setFeedback(null);
       setIdx((i) => {
         if (i + 1 >= items.length) {
-          setFinished(true);
+          setEndedEarly(true);
           return i;
         }
         return i + 1;

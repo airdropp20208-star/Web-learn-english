@@ -58,11 +58,12 @@ download/
 !download/README.md
 
 # sandbox-internal (not part of user project)
+# LƯU Ý: `tests/` đã bị gỡ khỏi danh sách này — bộ test Vitest + Playwright
+# của dự án nằm ở đó và phải được commit.
 skills/
 Caddyfile
 mini-services/
 examples/
-tests/
 .zscripts/
 
 # Token files (NEVER commit)
@@ -74,3 +75,7 @@ scripts/.gh_token_tmp
 # Vercel token file
 scripts/.vercel_token_tmp
 scripts/.gh_token_tmp
+
+# Playwright
+test-results/
+playwright-report/

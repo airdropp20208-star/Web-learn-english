@@ -14,11 +14,18 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
-import { Brain, CheckCircle2, RotateCcw, Play, Volume2 } from "lucide-react";
+import { Brain, CheckCircle2, RotateCcw, Play } from "lucide-react";
+import { PronounceButton } from "@/components/pronounce-button";
 import type { MemoryItemDTO, VocabItemDTO, QuizType } from "@/lib/types";
 import { getMemoryItems, getVocabItems, reviewMemoryItem } from "@/lib/storage";
 import { buildReviewSession, type ReviewSessionItem } from "@/lib/session-builder";
-import { previewSchedule, formatInterval, type ReviewRating } from "@/lib/fsrs";
+import {
+  previewSchedule,
+  formatInterval,
+  fromCardState,
+  type ReviewRating,
+} from "@/lib/fsrs";
+import { Rating } from "ts-fsrs";
 import { estimateRecallProbability } from "@/lib/mastery-engine";
 import { award } from "@/lib/gamification";
 import { getReviewComment } from "@/lib/humor";
@@ -33,10 +40,13 @@ const RATING_BUTTONS: Array<{
   color: string;
   key: string;
 }> = [
-  { rating: 2, label: "Again", color: "bg-red-500 hover:bg-red-600 text-white", key: "1" },
-  { rating: 3, label: "Hard", color: "bg-orange-500 hover:bg-orange-600 text-white", key: "2" },
-  { rating: 4, label: "Good", color: "bg-green-500 hover:bg-green-600 text-white", key: "3" },
-  { rating: 5, label: "Easy", color: "bg-blue-500 hover:bg-blue-600 text-white", key: "4" },
+  // Giá trị enum thật: Again=1, Hard=2, Good=3, Easy=4. Bản cũ gõ số trần
+  // 2/3/4/5 theo một comment sai, khiến MỌI nút gửi đi mức cao hơn một bậc
+  // và nút "Easy" gửi 5 — nằm ngoài dải hợp lệ.
+  { rating: Rating.Again, label: "Again", color: "bg-red-500 hover:bg-red-600 text-white", key: "1" },
+  { rating: Rating.Hard, label: "Hard", color: "bg-orange-500 hover:bg-orange-600 text-white", key: "2" },
+  { rating: Rating.Good, label: "Good", color: "bg-green-500 hover:bg-green-600 text-white", key: "3" },
+  { rating: Rating.Easy, label: "Easy", color: "bg-blue-500 hover:bg-blue-600 text-white", key: "4" },
 ];
 
 export function ReviewTab({ userId }: ReviewTabProps) {
@@ -117,14 +127,7 @@ export function ReviewTab({ userId }: ReviewTabProps) {
           {v.ipa && (
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <span className="font-mono">{v.ipa}</span>
-              {v.audioUrl && (
-                <button
-                  onClick={() => new Audio(v.audioUrl).play()}
-                  className="hover:text-primary"
-                >
-                  <Volume2 className="w-3.5 h-3.5" />
-                </button>
-              )}
+              <PronounceButton word={v.word} audioUrl={v.audioUrl} />
             </div>
           )}
           <div className="text-xs text-muted-foreground border-l-2 pl-2 italic mb-2">
@@ -192,14 +195,11 @@ export function ReviewTab({ userId }: ReviewTabProps) {
           <div className="bg-emerald-50 dark:bg-emerald-950 p-3 rounded-md text-sm">
             <strong>Answer:</strong> {v.word}
             {v.ipa && <span className="ml-2 font-mono text-xs">{v.ipa}</span>}
-            {v.audioUrl && (
-              <button
-                onClick={() => new Audio(v.audioUrl).play()}
-                className="ml-2 hover:text-primary"
-              >
-                <Volume2 className="w-3.5 h-3.5 inline" />
-              </button>
-            )}
+            <PronounceButton
+              word={v.word}
+              audioUrl={v.audioUrl}
+              className="ml-2 align-middle"
+            />
           </div>
         ) : (
           <Input
@@ -219,22 +219,22 @@ export function ReviewTab({ userId }: ReviewTabProps) {
     if (!session[currentIdx]) return;
     const item = session[currentIdx];
 
-    await reviewMemoryItem(item.item.id, rating);
+    await reviewMemoryItem(userId, item.item.id, rating);
 
     setResults((prev) => ({
       reviewed: prev.reviewed + 1,
-      again: prev.again + (rating === 2 ? 1 : 0),
+      again: prev.again + (rating === Rating.Again ? 1 : 0),
     }));
 
     // Award gamification — review-word gives XP + coins
-    const correct = rating !== 2; // "Again" = wrong
+    const correct = rating !== Rating.Again;
     const { newAchievements } = award("review-word");
     toast.success(getReviewComment(correct), { duration: 2500 });
     newAchievements.forEach((a) => {
       toast.success(`🏅 ${a.name}: ${a.description}`, { duration: 5000 });
     });
 
-    if (rating === 2) {
+    if (rating === Rating.Again) {
       toast.info("Sẽ ôn lại sớm", { duration: 2000 });
     }
 
@@ -306,7 +306,7 @@ export function ReviewTab({ userId }: ReviewTabProps) {
 
   const currentItem = session[currentIdx];
   const progress = (currentIdx / session.length) * 100;
-  const preview = previewSchedule(currentItem.item.card);
+  const preview = previewSchedule(fromCardState(currentItem.item.card));
 
   return (
     <div className="space-y-4">

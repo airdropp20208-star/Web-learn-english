@@ -4,6 +4,7 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
 import type { AnalyzeResponse, QuizResponse, CEFRLevel } from "./types";
+import { scoreText } from "./readability";
 
 // ============ Key management ============
 
@@ -183,6 +184,18 @@ const ANALYZE_SCHEMA = {
   required: ["title", "cefrLevel", "summary", "highlightedWords"],
 };
 
+/**
+ * Phân tích một đoạn văn bằng Gemini trong MỘT lần gọi.
+ *
+ * LƯU Ý: hiện KHÔNG nơi nào gọi hàm này. Luồng đang chạy trong app là
+ * `generateSummary` (chỉ hỏi Gemini tiêu đề/tóm tắt/CEFR) rồi lấy nghĩa, IPA,
+ * audio từ dịch vụ từ điển và bộ dữ liệu CEFR tĩnh — rẻ hơn nhiều. Giữ hàm này
+ * lại làm phương án dự phòng khi từ điển chết; nếu tới Phase 5 vẫn không ai
+ * dùng thì nên xoá hẳn thay vì để hai luồng phân tích song song.
+ *
+ * Gemini không trả IPA hay audio, nên hai trường đó luôn `null` ở đây — người
+ * gọi phải tự bù từ dịch vụ từ điển nếu cần.
+ */
 export async function analyzeText(content: string): Promise<AnalyzeResponse> {
   const prompt = `Analyze the following English text for a language learner.\n\nText:\n"""\n${content}\n"""\n\nExtract 3-8 vocabulary words that are worth learning (skip trivial words like "the", "and"). For each word, provide a definition matching its usage in context, a different example sentence, and its CEFR level. Also estimate the overall CEFR level of the text and provide a short title and summary.`;
 
@@ -226,14 +239,26 @@ export async function analyzeText(content: string): Promise<AnalyzeResponse> {
       definition: w.definition,
       example: w.example,
       contextSentence,
+      ipa: null,
+      audioUrl: null,
     };
   });
+
+  const score = scoreText(content);
 
   return {
     title: parsed.title,
     cefrLevel: parsed.cefrLevel,
     summary: parsed.summary,
     highlightedWords,
+    readability: score
+      ? {
+          fleschKincaid: score.fleschKincaid,
+          fleschReading: score.fleschReading,
+          cefrEstimate: score.cefrEstimate,
+          wordCount: score.wordCount,
+        }
+      : null,
   };
 }
 

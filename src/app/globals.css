@@ -3,6 +3,13 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Mốc cho điện thoại nhỏ. Tailwind bắt đầu từ `sm` (640px), quá thưa cho
+   thanh header vốn phải chứa tiêu đề, ba chỉ số và menu tài khoản trong
+   360px. */
+@theme {
+  --breakpoint-xs: 26rem;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);

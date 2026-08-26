@@ -25,6 +25,23 @@ interface WordScrambleProps {
 }
 
 /**
+ * Xáo chữ cái của một từ, đảm bảo kết quả KHÁC thứ tự gốc.
+ *
+ * Ở ngoài component vì nó chỉ phụ thuộc đối số truyền vào — nhờ vậy gọi được
+ * cả trong `useState` khởi tạo lẫn trong handler chuyển từ, thay vì phải nhốt
+ * trong một effect theo dõi `idx`.
+ */
+function scrambleWord(word: GameWord | undefined): string[] {
+  if (!word) return [];
+  const chars = word.word.toLowerCase().split("");
+  let scrambled = shuffle(chars);
+  if (scrambled.join("") === chars.join("") && chars.length > 1) {
+    scrambled = [...scrambled.slice(1), scrambled[0]];
+  }
+  return scrambled;
+}
+
+/**
  * Xếp chữ: cho nghĩa tiếng Việt/Anh, người chơi ghép các chữ cái bị xáo
  * thành từ đúng. Luyện nhớ mặt chữ chứ không chỉ nhận ra từ.
  */
@@ -34,19 +51,25 @@ export function WordScramble({
   cardStates,
   onExit,
 }: WordScrambleProps) {
-  const statesRef = useRef(cardStates);
+  // Ảnh chụp trạng thái thẻ lúc bắt đầu ván, cố định tới hết ván.
+  //
+  // Bản cũ dùng `useRef(cardStates)` rồi đọc `.current` ngay trong thân
+  // component — đọc ref lúc vẽ là thứ React Compiler không đảm bảo được. Ref
+  // này lại chẳng bao giờ được cập nhật, nên nó chỉ đang làm đúng việc mà
+  // `useState` đã làm sẵn: giữ nguyên giá trị đầu tiên.
+  const [initialStates] = useState(cardStates);
 
   // Chỉ lấy từ đơn thuần chữ cái, đủ ngắn để xếp trên điện thoại
   const [pool] = useState<GameWord[]>(() =>
     pickWords(
       words.filter((w) => meaningOf(w) && /^[a-zA-Z]{3,12}$/.test(w.word)),
-      statesRef.current,
+      initialStates,
       WORD_COUNT
     )
   );
 
   const [idx, setIdx] = useState(0);
-  const [letters, setLetters] = useState<string[]>([]);
+  const [letters, setLetters] = useState<string[]>(() => scrambleWord(pool[0]));
   const [slots, setSlots] = useState<number[]>([]);
   const [result, setResult] = useState<"correct" | "wrong" | null>(null);
   const [revealed, setRevealed] = useState(false);
@@ -55,37 +78,30 @@ export function WordScramble({
 
   const current = pool[idx];
 
-  // Xáo chữ cái mỗi khi sang từ mới. Chỉ phụ thuộc idx nên không thể
-  // bị xáo lại giữa chừng do một lần vẽ lại bất kỳ.
-  useEffect(() => {
-    const word = pool[idx];
-    if (!word) return;
-    const chars = word.word.toLowerCase().split("");
-    let scrambled = shuffle(chars);
-    // Tránh trường hợp xáo xong vẫn ra đúng thứ tự gốc
-    if (scrambled.join("") === chars.join("") && chars.length > 1) {
-      scrambled = [...scrambled.slice(1), scrambled[0]];
-    }
-    setLetters(scrambled);
-    setSlots([]);
-    setResult(null);
-    setRevealed(false);
-  }, [idx, pool]);
+  /**
+   * Người chơi chọn một chữ cái.
+   *
+   * Việc chấm bài nằm ngay đây chứ không ở một effect theo dõi `slots`: đúng
+   * lúc ô cuối cùng được lấp thì đã biết đáp án, không cần chờ thêm một vòng
+   * vẽ nữa. Bản cũ để trong effect nên còn phải tự canh `result !== null` để
+   * khỏi chấm hai lần.
+   */
+  function handlePickLetter(i: number) {
+    if (usedSet.has(i) || result !== null || revealed || !current) return;
 
-  // Chấm bài ngay khi xếp đủ chữ
-  useEffect(() => {
-    if (!current || result !== null || revealed) return;
-    if (letters.length === 0 || slots.length !== letters.length) return;
+    const nextSlots = [...slots, i];
+    setSlots(nextSlots);
+    if (nextSlots.length !== letters.length) return;
 
-    const guess = slots.map((i) => letters[i]).join("");
+    const guess = nextSlots.map((k) => letters[k]).join("");
     const ok = guess === current.word.toLowerCase();
     setResult(ok ? "correct" : "wrong");
     if (ok) {
       setScore((s) => s + 1);
       speakWord(current);
     }
-    void recordAnswer(deckId, current, ok, statesRef.current[current.word]);
-  }, [slots, letters, current, result, revealed, deckId]);
+    void recordAnswer(deckId, current, ok, initialStates[current.word]);
+  }
 
   function handleNext() {
     if (idx + 1 >= pool.length) {
@@ -98,13 +114,18 @@ export function WordScramble({
       });
       return;
     }
-    setIdx((i) => i + 1);
+    const next = idx + 1;
+    setIdx(next);
+    setLetters(scrambleWord(pool[next]));
+    setSlots([]);
+    setResult(null);
+    setRevealed(false);
   }
 
   function handleReveal() {
     if (!current || result !== null) return;
     setRevealed(true);
-    void recordAnswer(deckId, current, false, statesRef.current[current.word]);
+    void recordAnswer(deckId, current, false, initialStates[current.word]);
   }
 
   if (pool.length === 0) {
@@ -222,7 +243,7 @@ export function WordScramble({
             {letters.map((ch, i) => (
               <button
                 key={`${ch}-${i}`}
-                onClick={() => setSlots((s) => (usedSet.has(i) ? s : [...s, i]))}
+                onClick={() => handlePickLetter(i)}
                 disabled={usedSet.has(i)}
                 className={`w-9 h-11 rounded-lg border text-lg font-bold uppercase transition-all ${
                   usedSet.has(i)

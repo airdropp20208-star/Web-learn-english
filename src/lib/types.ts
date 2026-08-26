@@ -11,6 +11,8 @@ export interface FSRSCardState {
   difficulty: number;
   elapsed_days: number;
   scheduled_days: number;
+  /** Vị trí trong chuỗi bước học/học lại của FSRS. Thiếu nó là lịch ôn sai. */
+  learning_steps: number;
   reps: number;
   lapses: number;
   state: number;        // 0=New, 1=Learning, 2=Review, 3=Relearning
@@ -45,6 +47,8 @@ export interface VocabItemDTO {
   sourceTextId: string;
   memoryItemId: string;
   createdAt: number;
+  /** Mốc ghi lần cuối, epoch ms — trường giải xung đột của src/lib/sync.ts. */
+  updatedAt: number;
 }
 
 export interface TextDTO {
@@ -84,6 +88,14 @@ export interface UserProgressDTO {
   tierMasteryScore: number;
   streakDays: number;
   lastActiveDate: number;
+  /**
+   * Mốc ghi lần cuối, epoch ms — trường giải xung đột của src/lib/sync.ts.
+   *
+   * Khác `lastActiveDate`: cái kia mang nghĩa nghiệp vụ ("lần cuối người dùng
+   * học") và có thể được đặt bằng giá trị không phải hiện tại; cái này chỉ nói
+   * bản ghi được ghi lúc nào.
+   */
+  updatedAt: number;
 }
 
 export interface ShadowSessionDTO {

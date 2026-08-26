@@ -1,5 +1,17 @@
 // Gamification system — Coin, Streak, Level/XP, Achievements, Daily goal
-// All state persisted in localStorage
+//
+// Nguồn sự thật nằm ở localStorage, phân vùng theo người dùng đang hoạt động.
+// Khi đã đăng nhập, src/lib/sync.ts gương dữ liệu này lên server và hoà giải
+// theo updatedAt.
+
+import {
+  getActiveUserId,
+  readScopedFor,
+  readWithLegacyFallback,
+  scopedKey,
+  subscribeActiveUser,
+  writeScopedFor,
+} from "./active-user";
 
 export interface GamificationState {
   coins: number;
@@ -14,6 +26,11 @@ export interface GamificationState {
     gamesPlayed: number;
   };
   achievements: string[]; // achievement IDs unlocked
+  /**
+   * Mốc ghi lần cuối, epoch ms. Trường quyết định khi hoà giải xung đột giữa
+   * máy này và server (last-write-wins).
+   */
+  updatedAt: number;
 }
 
 export interface Achievement {
@@ -111,51 +128,115 @@ export const ACHIEVEMENTS: Achievement[] = [
   },
 ];
 
-const STORAGE_KEY = "gamification-state";
+/** Tiền tố khoá; khoá thật có gắn id người dùng — xem active-user.ts. */
+export const STORAGE_PREFIX = "gamification-state";
 
-const DEFAULT_STATE: GamificationState = {
-  coins: 0,
-  xp: 0,
-  level: 1,
-  streak: 0,
-  lastStudyDate: null,
-  todayProgress: {
-    date: todayStr(),
-    wordsLearned: 0,
-    wordsReviewed: 0,
-    gamesPlayed: 0,
-  },
-  achievements: [],
-};
+/** Khoá của bản cũ, thời chưa phân vùng theo người dùng. */
+const LEGACY_KEY = "gamification-state";
+
+function storageKey(): string {
+  return scopedKey(STORAGE_PREFIX);
+}
 
 function todayStr(): string {
   return new Date().toISOString().split("T")[0];
 }
 
-function load(): GamificationState {
-  if (typeof window === "undefined") return DEFAULT_STATE;
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return DEFAULT_STATE;
-    const state = { ...DEFAULT_STATE, ...JSON.parse(raw) };
-    // Reset daily progress if new day
-    if (state.todayProgress.date !== todayStr()) {
-      state.todayProgress = {
-        date: todayStr(),
-        wordsLearned: 0,
-        wordsReviewed: 0,
-        gamesPlayed: 0,
-      };
-    }
-    return state;
-  } catch {
-    return DEFAULT_STATE;
-  }
+function emptyDailyProgress(): GamificationState["todayProgress"] {
+  return {
+    date: todayStr(),
+    wordsLearned: 0,
+    wordsReviewed: 0,
+    gamesPlayed: 0,
+  };
 }
 
+/**
+ * Trạng thái khởi điểm — cố ý là HÀM, không phải hằng số dùng chung.
+ *
+ * Bản cũ giữ một object `DEFAULT_STATE` ở cấp module rồi `load()` trả thẳng
+ * chính nó ra khi chưa có dữ liệu. `award()` mutate lên object nhận được, nên
+ * "trạng thái mặc định" bị cộng điểm vĩnh viễn: sau `resetGamification()`
+ * người dùng không quay về 0 XP mà về đúng số điểm đã lỡ tích vào hằng số.
+ *
+ * Trên server còn nặng hơn — `typeof window === "undefined"` khiến MỌI request
+ * dùng chung một object, điểm của người này chảy sang người khác. Phase 2 sẽ
+ * chạy code này phía server nên phải sạch từ bây giờ.
+ *
+ * `date` cũng phải tính lúc gọi: tính một lần lúc nạp module thì tab mở qua
+ * nửa đêm sẽ mãi mang ngày hôm trước.
+ */
+function defaultState(): GamificationState {
+  return {
+    coins: 0,
+    xp: 0,
+    level: 1,
+    streak: 0,
+    lastStudyDate: null,
+    todayProgress: emptyDailyProgress(),
+    achievements: [],
+    updatedAt: 0,
+  };
+}
+
+function load(): GamificationState {
+  return parseState(
+    typeof window === "undefined"
+      ? null
+      : readWithLegacyFallback(STORAGE_PREFIX, LEGACY_KEY)
+  );
+}
+
+/** Trạng thái của một người dùng cụ thể, không phụ thuộc ai đang hoạt động. */
+export function getGamificationStateFor(userId: string): GamificationState {
+  if (typeof window === "undefined") return defaultState();
+  return parseState(readScopedFor(STORAGE_PREFIX, userId));
+}
+
+function parseState(raw: string | null): GamificationState {
+  const base = defaultState();
+
+  let parsed: Partial<GamificationState>;
+  try {
+    if (!raw) return base;
+    parsed = JSON.parse(raw) as Partial<GamificationState>;
+  } catch {
+    // JSON hỏng hoặc localStorage bị chặn (chế độ riêng tư) — coi như người mới
+    return base;
+  }
+
+  const state: GamificationState = {
+    ...base,
+    ...parsed,
+    // Gộp nông sẽ để lọt `todayProgress` thiếu trường từ bản lưu cũ, rồi
+    // `state.todayProgress.wordsLearned += n` cho ra NaN.
+    todayProgress: { ...base.todayProgress, ...(parsed.todayProgress ?? {}) },
+    achievements: [...(parsed.achievements ?? [])],
+  };
+
+  // Sang ngày mới thì tiến độ hôm nay bắt đầu lại
+  if (state.todayProgress.date !== todayStr()) {
+    state.todayProgress = emptyDailyProgress();
+  }
+  return state;
+}
+
+/**
+ * Ghi trạng thái và đóng dấu thời gian.
+ *
+ * Đóng dấu bằng cách sửa thẳng vào object, không tạo bản sao: người gọi
+ * (award) đã cầm tham chiếu này và sẽ publish nó ra cho React, nên bản sao sẽ
+ * khiến UI hiện updatedAt cũ.
+ */
 function save(state: GamificationState): void {
+  state.updatedAt = Date.now();
   if (typeof window === "undefined") return;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  try {
+    localStorage.setItem(storageKey(), JSON.stringify(state));
+  } catch {
+    // Hết dung lượng hoặc trình duyệt chặn ghi. Mất điểm còn hơn sập cả tab
+    // học giữa chừng — nuốt lỗi ở đây là cố ý.
+  }
 }
 
 /**
@@ -261,6 +342,7 @@ export function award(
   }
 
   save(state);
+  publish(state);
   return { state, newAchievements };
 }
 
@@ -268,7 +350,7 @@ export function award(
  * Get current state (read-only).
  */
 export function getState(): GamificationState {
-  return load();
+  return getSnapshot();
 }
 
 /**
@@ -281,7 +363,7 @@ export function getDailyProgress(): {
   goal: number;
   percent: number;
 } {
-  const state = load();
+  const state = getSnapshot();
   const current = state.todayProgress.wordsLearned + state.todayProgress.wordsReviewed;
   return {
     current,
@@ -295,5 +377,91 @@ export function getDailyProgress(): {
  */
 export function resetGamification(): void {
   if (typeof window === "undefined") return;
-  localStorage.removeItem(STORAGE_KEY);
+  localStorage.removeItem(storageKey());
+  publish(null);
+}
+
+/**
+ * Ghi đè toàn bộ trạng thái, GIỮ NGUYÊN updatedAt được truyền vào.
+ *
+ * Chỉ engine đồng bộ mới nên gọi: nó vừa hoà giải xong với server và cần giữ
+ * đúng mốc của bên thắng. Đóng dấu lại thành "bây giờ" sẽ khiến bản vừa kéo về
+ * luôn thắng ở lần đồng bộ sau, và máy kia không bao giờ đẩy được gì lên.
+ */
+export function replaceGamificationState(
+  userId: string,
+  state: GamificationState
+): void {
+  writeScopedFor(STORAGE_PREFIX, userId, JSON.stringify(state));
+  // Chỉ đẩy vào store React khi đang ghi cho chính người dùng hiện hành. Ghi
+  // hộ một danh tính khác mà vẫn publish thì màn hình sẽ hiện điểm của người
+  // không ngồi trước máy.
+  if (userId === getActiveUserId()) publish(state);
+}
+
+// ==========================================================================
+// Store cho React — dùng với `useSyncExternalStore`
+// ==========================================================================
+//
+// Trước đây `page.tsx` đọc điểm bằng `setInterval(update, 5000)`: bộ đếm XP
+// trên đầu trang trễ tới 5 giây sau mỗi lần cộng điểm, và vòng lặp chạy mãi kể
+// cả khi người dùng không làm gì. Ở đây đổi sang mô hình đăng ký: `award()`
+// báo ngay cho mọi component đang xem.
+
+type Listener = () => void;
+const listeners = new Set<Listener>();
+
+/**
+ * Ảnh chụp hiện tại, giữ nguyên tham chiếu giữa các lần gọi.
+ *
+ * `useSyncExternalStore` so sánh kết quả `getSnapshot()` bằng `Object.is`.
+ * Trả về object mới mỗi lần gọi sẽ khiến React vẽ lại vô tận — nên bắt buộc
+ * phải cache và chỉ đổi tham chiếu khi dữ liệu thật sự đổi.
+ */
+let snapshot: GamificationState | null = null;
+
+/** Ảnh chụp phía server: hằng số, dùng chung, KHÔNG ai được sửa. */
+const SERVER_SNAPSHOT: GamificationState = Object.freeze(defaultState());
+
+function getSnapshot(): GamificationState {
+  if (typeof window === "undefined") return SERVER_SNAPSHOT;
+  if (snapshot === null) snapshot = load();
+  return snapshot;
+}
+
+/** Bỏ cache và đánh thức người đăng ký. `next` = null nghĩa là đọc lại. */
+function publish(next: GamificationState | null): void {
+  snapshot = next;
+  for (const listener of listeners) listener();
+}
+
+// Đổi người dùng thì kho cũng đổi: bỏ cache để lần đọc sau lấy đúng khoá mới.
+subscribeActiveUser(() => publish(null));
+
+export function subscribeGamification(listener: Listener): () => void {
+  listeners.add(listener);
+
+  // Tab khác cùng trình duyệt ghi vào localStorage thì tab này cũng phải cập
+  // nhật — sự kiện `storage` chỉ bắn sang các tab KHÁC, không bắn cho tab vừa ghi.
+  const onStorage = (e: StorageEvent) => {
+    if (e.key === storageKey() || e.key === null) publish(null);
+  };
+  if (typeof window !== "undefined" && listeners.size === 1) {
+    window.addEventListener("storage", onStorage);
+  }
+
+  return () => {
+    listeners.delete(listener);
+    if (typeof window !== "undefined") {
+      window.removeEventListener("storage", onStorage);
+    }
+  };
+}
+
+export function getGamificationSnapshot(): GamificationState {
+  return getSnapshot();
+}
+
+export function getGamificationServerSnapshot(): GamificationState {
+  return SERVER_SNAPSHOT;
 }

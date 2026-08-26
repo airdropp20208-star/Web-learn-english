@@ -30,11 +30,17 @@ interface SpeedQuizProps {
  * Chuỗi đúng liên tiếp nhân điểm (combo).
  */
 export function SpeedQuiz({ deckId, words, cardStates, onExit }: SpeedQuizProps) {
-  const statesRef = useRef(cardStates);
+  // Ảnh chụp trạng thái thẻ lúc bắt đầu ván, cố định tới hết ván.
+  //
+  // Bản cũ dùng `useRef(cardStates)` rồi đọc `.current` ngay trong thân
+  // component — đọc ref lúc vẽ là thứ React Compiler không đảm bảo được. Ref
+  // này lại chẳng bao giờ được cập nhật, nên nó chỉ đang làm đúng việc mà
+  // `useState` đã làm sẵn: giữ nguyên giá trị đầu tiên.
+  const [initialStates] = useState(cardStates);
 
   // Sinh bộ câu hỏi đúng một lần khi vào ván
   const [questions] = useState<GameQuestion[]>(() =>
-    buildQuestions(words, statesRef.current, QUESTION_COUNT, [
+    buildQuestions(words, initialStates, QUESTION_COUNT, [
       "meaning-to-word",
       "word-to-meaning",
     ])
@@ -47,17 +53,14 @@ export function SpeedQuiz({ deckId, words, cardStates, onExit }: SpeedQuizProps)
   const [bestCombo, setBestCombo] = useState(0);
   const [correctCount, setCorrectCount] = useState(0);
   const [timeLeft, setTimeLeft] = useState(TOTAL_SECONDS);
-  const [finished, setFinished] = useState(false);
+  const [endedEarly, setEndedEarly] = useState(false);
+  const finished = endedEarly || timeLeft <= 0;
 
   const current = questions[idx];
 
   // Đồng hồ ván
   useEffect(() => {
     if (finished) return;
-    if (timeLeft <= 0) {
-      setFinished(true);
-      return;
-    }
     const timer = window.setTimeout(() => setTimeLeft((t) => t - 1), 1000);
     return () => window.clearTimeout(timer);
   }, [timeLeft, finished]);
@@ -94,14 +97,14 @@ export function SpeedQuiz({ deckId, words, cardStates, onExit }: SpeedQuizProps)
       deckId,
       current.target,
       correct,
-      statesRef.current[current.target.word]
+      initialStates[current.target.word]
     );
 
     window.setTimeout(() => {
       setPicked(null);
       setIdx((i) => {
         if (i + 1 >= questions.length) {
-          setFinished(true);
+          setEndedEarly(true);
           return i;
         }
         return i + 1;

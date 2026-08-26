@@ -61,7 +61,10 @@ export function MemoryFlip({
   const [moves, setMoves] = useState(0);
   const [score, setScore] = useState(0);
   const [timeLeft, setTimeLeft] = useState(TOTAL_SECONDS);
-  const [gameOver, setGameOver] = useState(false);
+  // Hết giờ là hết ván — suy ra chứ không lưu riêng. Chỉ việc chơi hết số
+  // vòng mới cần một biến state.
+  const [clearedAllRounds, setClearedAllRounds] = useState(false);
+  const gameOver = clearedAllRounds || timeLeft <= 0;
 
   // Sinh bàn chơi đúng một lần mỗi vòng. Mọi thứ khác đọc qua ref để
   // không bao giờ bị dựng lại giữa ván.
@@ -94,33 +97,31 @@ export function MemoryFlip({
   // Đồng hồ ván
   useEffect(() => {
     if (gameOver) return;
-    if (timeLeft <= 0) {
-      setGameOver(true);
-      return;
-    }
     const timer = window.setTimeout(() => setTimeLeft((t) => t - 1), 1000);
     return () => window.clearTimeout(timer);
   }, [timeLeft, gameOver]);
 
-  // Hết thẻ trong vòng thì sang vòng sau
-  useEffect(() => {
-    if (cards.length === 0 || matched.length < cards.length) return;
-
+  /**
+   * Kết thúc một vòng: cộng điểm, sang vòng sau (hoặc kết thúc ván).
+   *
+   * Bản cũ để việc này trong một effect theo dõi `matched`, kèm một
+   * `eslint-disable` để nó đừng đòi thêm dependency. Effect đó chạy SAU khi
+   * lật xong nên tiền thưởng thời gian bị tính ở giây kế tiếp; gọi thẳng từ
+   * chỗ cặp cuối cùng khớp vừa đúng vừa bớt được một vòng vẽ.
+   */
+  function completeRound() {
     setScore((s) => s + 100 + timeLeft);
     const nextRound = round + 1;
     setRound(nextRound);
+    if (nextRound < ROUNDS) return;
 
-    if (nextRound >= ROUNDS) {
-      setGameOver(true);
-      const { newAchievements } = award("game-win");
-      toast.success(getGameComment(true), { duration: 3000 });
-      newAchievements.forEach((a) => {
-        toast.success(`🏅 ${a.name}: ${a.description}`, { duration: 5000 });
-      });
-    }
-    // chỉ chạy theo matched để tránh lặp thừa
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [matched]);
+    setClearedAllRounds(true);
+    const { newAchievements } = award("game-win");
+    toast.success(getGameComment(true), { duration: 3000 });
+    newAchievements.forEach((a) => {
+      toast.success(`🏅 ${a.name}: ${a.description}`, { duration: 5000 });
+    });
+  }
 
   function handleFlip(card: MemoryCard) {
     if (gameOver) return;
@@ -143,9 +144,11 @@ export function MemoryFlip({
     }
 
     if (isMatch) {
+      const lastPair = matched.length + 2 >= cards.length;
       window.setTimeout(() => {
         setMatched((m) => [...m, first.id, second.id]);
         setFlipped([]);
+        if (lastPair) completeRound();
       }, 350);
     } else {
       window.setTimeout(() => setFlipped([]), 800);

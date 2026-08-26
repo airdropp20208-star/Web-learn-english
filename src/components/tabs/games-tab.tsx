@@ -371,6 +371,27 @@ interface MatchPair {
 const MATCH_ROUNDS = 3;
 const MATCH_PAIRS = 5;
 
+/**
+ * Bốc `MATCH_PAIRS` từ và xáo thứ tự cột nghĩa cho một vòng chơi.
+ *
+ * Ở ngoài component để gọi được cả lúc khởi tạo state lẫn khi sang vòng mới,
+ * thay vì phải nhốt trong một effect theo dõi `round`.
+ */
+function dealMatchRound(
+  words: GameWord[],
+  states: Record<string, FSRSCardState>
+): { pairs: MatchPair[]; order: number[] } {
+  const picked = pickWords(words, states, MATCH_PAIRS);
+  return {
+    pairs: picked.map((word) => ({
+      word,
+      meaning: meaningOf(word) as string,
+      matched: false,
+    })),
+    order: shuffle(picked.map((_, i) => i)),
+  };
+}
+
 function MatchGame({
   deck,
   cardStates,
@@ -380,87 +401,90 @@ function MatchGame({
   cardStates: Record<string, FSRSCardState>;
   onExit: () => void;
 }) {
-  const [round, setRound] = useState(0);
-  const [pairs, setPairs] = useState<MatchPair[]>([]);
-  /**
-   * Thứ tự hiển thị cột nghĩa. Phải nằm trong state — bản cũ xáo ngay trong
-   * lúc render nên đồng hồ đếm ngược làm cột nghĩa nhảy mỗi giây.
-   */
-  const [meaningOrder, setMeaningOrder] = useState<number[]>([]);
-  const [selected, setSelected] = useState<string | null>(null);
-  const [wrongPair, setWrongPair] = useState<[string, string] | null>(null);
-  const [score, setScore] = useState(0);
-  const [timeLeft, setTimeLeft] = useState(60);
-  const [gameOver, setGameOver] = useState(false);
-
   const usableWords = useMemo(
     () => deck.words.filter((w) => meaningOf(w)),
     [deck.words]
   );
 
-  // Giữ trong ref để việc sinh vòng chơi không phụ thuộc danh tính hàm/prop
-  const statesRef = useRef(cardStates);
+  // Ảnh chụp trạng thái thẻ lúc bắt đầu ván, cố định tới hết ván.
+  //
+  // Bản cũ dùng `useRef(cardStates)` rồi đọc `.current` ngay trong thân
+  // component — đọc ref lúc vẽ là thứ React Compiler không đảm bảo được. Ref
+  // này lại chẳng bao giờ được cập nhật, nên nó chỉ đang làm đúng việc mà
+  // `useState` đã làm sẵn: giữ nguyên giá trị đầu tiên.
+  const [initialStates] = useState(cardStates);
+
+  const [initialDeal] = useState(() => dealMatchRound(usableWords, cardStates));
+
+  const [round, setRound] = useState(0);
+  const [pairs, setPairs] = useState<MatchPair[]>(initialDeal.pairs);
+  /**
+   * Thứ tự hiển thị cột nghĩa. Phải nằm trong state — bản cũ xáo ngay trong
+   * lúc render nên đồng hồ đếm ngược làm cột nghĩa nhảy mỗi giây.
+   */
+  const [meaningOrder, setMeaningOrder] = useState<number[]>(initialDeal.order);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [wrongPair, setWrongPair] = useState<[string, string] | null>(null);
+  const [score, setScore] = useState(0);
+  const [timeLeft, setTimeLeft] = useState(60);
+  // Hết giờ là hết ván — suy ra chứ không lưu riêng.
+  const [clearedAllRounds, setClearedAllRounds] = useState(false);
+  const gameOver = clearedAllRounds || timeLeft <= 0;
+
   const exitRef = useRef(onExit);
   useEffect(() => {
     exitRef.current = onExit;
   }, [onExit]);
 
-  /**
-   * Sinh vòng chơi đúng một lần mỗi khi số vòng đổi.
-   * Cố tình chỉ phụ thuộc [round] — mọi thứ khác đều đọc qua ref, nên không
-   * có đường nào để một lần vẽ lại bất kỳ làm xáo lại bàn chơi.
-   */
-  useEffect(() => {
-    if (usableWords.length < MATCH_PAIRS) {
-      toast.error(`Bộ từ này cần ít nhất ${MATCH_PAIRS} từ có nghĩa`);
-      exitRef.current();
-      return;
-    }
-    if (round >= MATCH_ROUNDS) return;
-
-    const picked = pickWords(usableWords, statesRef.current, MATCH_PAIRS);
-    setPairs(
-      picked.map((word) => ({
-        word,
-        meaning: meaningOf(word) as string,
-        matched: false,
-      }))
-    );
-    setMeaningOrder(shuffle(picked.map((_, i) => i)));
+  /** Chia bàn mới cho vòng kế tiếp. */
+  function dealRound() {
+    const next = dealMatchRound(usableWords, initialStates);
+    setPairs(next.pairs);
+    setMeaningOrder(next.order);
     setSelected(null);
     setWrongPair(null);
-  }, [round, usableWords]);
+  }
+
+  // Bộ từ quá mỏng thì không chơi được — thoát ra và báo. Đây là tác dụng phụ
+  // thật (toast + điều hướng), nên vẫn đúng chỗ trong effect.
+  const tooFewWords = usableWords.length < MATCH_PAIRS;
+  useEffect(() => {
+    if (!tooFewWords) return;
+    toast.error(`Bộ từ này cần ít nhất ${MATCH_PAIRS} từ có nghĩa`);
+    exitRef.current();
+  }, [tooFewWords]);
 
   // Đồng hồ chung cho cả ván
   useEffect(() => {
     if (gameOver) return;
-    if (timeLeft <= 0) {
-      setGameOver(true);
-      return;
-    }
     const timer = window.setTimeout(() => setTimeLeft((t) => t - 1), 1000);
     return () => window.clearTimeout(timer);
   }, [timeLeft, gameOver]);
 
-  // Hoàn thành một vòng
-  useEffect(() => {
-    if (pairs.length === 0 || !pairs.every((p) => p.matched)) return;
-
+  /**
+   * Kết thúc một vòng: cộng điểm rồi chia bàn mới (hoặc kết thúc ván).
+   *
+   * Bản cũ để trong một effect theo dõi `pairs`, kèm `eslint-disable` để nó
+   * đừng đòi thêm dependency. Gọi thẳng từ chỗ cặp cuối cùng khớp thì tiền
+   * thưởng thời gian tính đúng vào giây người chơi hoàn thành.
+   */
+  function completeRound() {
     setScore((s) => s + 100 + timeLeft * 2);
     const nextRound = round + 1;
     setRound(nextRound);
 
-    if (nextRound >= MATCH_ROUNDS) {
-      setGameOver(true);
-      const { newAchievements } = award("game-win");
-      toast.success(getGameComment(true), { duration: 3000 });
-      newAchievements.forEach((a) => {
-        toast.success(`🏅 ${a.name}: ${a.description}`, { duration: 5000 });
-      });
+    if (nextRound < MATCH_ROUNDS) {
+      dealRound();
+      return;
     }
-    // chạy theo pairs, không thêm dep khác để tránh chạy lại thừa
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pairs]);
+
+    setClearedAllRounds(true);
+    const { newAchievements } = award("game-win");
+    toast.success(getGameComment(true), { duration: 3000 });
+    newAchievements.forEach((a) => {
+      toast.success(`🏅 ${a.name}: ${a.description}`, { duration: 5000 });
+    });
+  }
 
   function handleClick(type: "word" | "meaning", idx: number) {
     if (gameOver || !pairs[idx] || pairs[idx].matched) return;
@@ -487,15 +511,17 @@ function MatchGame({
         deck.id,
         pairs[idx].word,
         true,
-        statesRef.current[pairs[idx].word.word]
+        initialStates[pairs[idx].word.word]
       );
+      const lastPair = pairs.every((p, i) => i === idx || p.matched);
+      if (lastPair) completeRound();
     } else {
       setWrongPair([selected, key]);
       void recordAnswer(
         deck.id,
         pairs[selIdx].word,
         false,
-        statesRef.current[pairs[selIdx].word.word]
+        initialStates[pairs[selIdx].word.word]
       );
       window.setTimeout(() => {
         setWrongPair(null);
@@ -645,9 +671,15 @@ function SpellingGame({
   cardStates: Record<string, FSRSCardState>;
   onExit: () => void;
 }) {
-  const statesRef = useRef(cardStates);
+  // Ảnh chụp trạng thái thẻ lúc bắt đầu ván, cố định tới hết ván.
+  //
+  // Bản cũ dùng `useRef(cardStates)` rồi đọc `.current` ngay trong thân
+  // component — đọc ref lúc vẽ là thứ React Compiler không đảm bảo được. Ref
+  // này lại chẳng bao giờ được cập nhật, nên nó chỉ đang làm đúng việc mà
+  // `useState` đã làm sẵn: giữ nguyên giá trị đầu tiên.
+  const [initialStates] = useState(cardStates);
   const [words] = useState<GameWord[]>(() =>
-    pickWords(deck.words, statesRef.current, 10)
+    pickWords(deck.words, initialStates, 10)
   );
   const [currentIdx, setCurrentIdx] = useState(0);
   const [input, setInput] = useState("");
@@ -667,7 +699,7 @@ function SpellingGame({
     const correct = isTypedAnswerCorrect(input, current.word);
     setResult(correct ? "correct" : "wrong");
     if (correct) setScore((s) => s + 1);
-    void recordAnswer(deck.id, current, correct, statesRef.current[current.word]);
+    void recordAnswer(deck.id, current, correct, initialStates[current.word]);
   }
 
   function handleNext() {
