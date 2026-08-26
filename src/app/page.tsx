@@ -1,6 +1,6 @@
 "use client";
 
-import { forwardRef, useState, Suspense } from "react";
+import { forwardRef, useState, useSyncExternalStore, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   Home,
@@ -27,6 +27,7 @@ import { ProfileTab } from "@/components/tabs/profile-tab";
 import { ProgressTab } from "@/components/tabs/progress-tab";
 import { ShadowTab } from "@/components/tabs/shadow-tab";
 import { LandingPage } from "@/components/landing-page";
+import { ErrorBoundary } from "@/components/error-boundary";
 import { UserMenu } from "@/components/user-menu";
 import {
   Drawer,
@@ -83,6 +84,41 @@ const TABS: TabDef[] = [
   { id: "profile", label: "Hồ sơ", shortLabel: "Tôi", icon: User, hint: "Thành tích, huy hiệu, cài đặt", primary: false },
 ];
 
+/**
+ * Nhớ rằng người này đã đi qua màn giới thiệu.
+ *
+ * Không nhớ thì mỗi lần F5 lại rơi về landing và phải bấm "Bắt đầu" lại —
+ * phiền nhất với người học hằng ngày, đúng nhóm người dùng chính.
+ */
+const KEY_DA_VAO_APP = "wle:da-vao-app";
+
+function subscribeDaVaoApp(onChange: () => void) {
+  window.addEventListener("storage", onChange);
+  return () => window.removeEventListener("storage", onChange);
+}
+
+function docDaVaoApp(): boolean {
+  try {
+    return window.localStorage.getItem(KEY_DA_VAO_APP) === "1";
+  } catch {
+    return false;
+  }
+}
+
+/** Trên máy chủ chưa đọc được localStorage, nên trả "chưa biết" chứ không đoán. */
+function docDaVaoAppTrenServer(): null {
+  return null;
+}
+
+function ghiDaVaoApp(daVao: boolean) {
+  try {
+    if (daVao) window.localStorage.setItem(KEY_DA_VAO_APP, "1");
+    else window.localStorage.removeItem(KEY_DA_VAO_APP);
+  } catch {
+    // Chế độ riêng tư chặn localStorage. Chỉ mất phần ghi nhớ, app vẫn chạy.
+  }
+}
+
 const PRIMARY_TABS = TABS.filter((t) => t.primary);
 const SECONDARY_TABS = TABS.filter((t) => !t.primary);
 
@@ -113,8 +149,17 @@ function PageContent() {
   // người dùng tự bấm vào/ra.
   const openAppFromUrl = searchParams.get("app") === "1";
   const [landingOverride, setLandingOverride] = useState<boolean | null>(null);
-  const showLanding = landingOverride ?? !openAppFromUrl;
-  const setShowLanding = setLandingOverride;
+  const daVaoApp = useSyncExternalStore(
+    subscribeDaVaoApp,
+    docDaVaoApp,
+    docDaVaoAppTrenServer
+  );
+  const showLanding = landingOverride ?? (!openAppFromUrl && daVaoApp !== true);
+
+  function setShowLanding(hien: boolean) {
+    ghiDaVaoApp(!hien);
+    setLandingOverride(hien);
+  }
   const [activeTab, setActiveTab] = useState<TabId>("home");
   const [studyMode, setStudyMode] = useState<StudyModeId>("flashcard");
   const [initialDeckId, setInitialDeckId] = useState<string | undefined>(
@@ -147,6 +192,13 @@ function PageContent() {
     setShowLanding(false);
   }
 
+  // Lần vẽ hydrate chưa chạm được localStorage nên chưa biết người này đã
+  // từng vào app chưa. Vẽ màn chờ thay vì đoán "chưa": đoán sai thì người
+  // quay lại thấy landing nháy qua rồi biến mất, khó chịu hơn là chờ một nhịp.
+  if (daVaoApp === null && landingOverride === null && !openAppFromUrl) {
+    return <LoadingScreen />;
+  }
+
   if (showLanding) {
     return <LandingPage onStart={() => setShowLanding(false)} />;
   }
@@ -159,6 +211,7 @@ function PageContent() {
       <aside className="hidden md:flex fixed left-0 top-0 bottom-0 w-60 border-r bg-sidebar flex-col p-4 z-30">
         <button
           onClick={() => setShowLanding(true)}
+          aria-label="Về trang giới thiệu"
           className="flex items-center gap-2.5 mb-6 px-1"
         >
           <div className="w-9 h-9 rounded-xl bg-brand flex items-center justify-center text-white font-bold">
@@ -216,6 +269,7 @@ function PageContent() {
             <div className="flex items-center gap-2.5 min-w-0">
               <button
                 onClick={() => setShowLanding(true)}
+                aria-label="Về trang giới thiệu"
                 className="w-8 h-8 rounded-xl bg-brand flex items-center justify-center text-white font-bold text-sm shrink-0 md:hidden"
               >
                 L
@@ -251,29 +305,34 @@ function PageContent() {
           key={activeTab}
           className="flex-1 w-full max-w-4xl mx-auto px-4 py-5 pb-28 md:pb-8 animate-rise"
         >
-          {activeTab === "home" && (
-            <HomeTab onNavigate={(t) => handleNavigate(t)} />
-          )}
-          {activeTab === "path" && <PathTab />}
-          {activeTab === "decks" && (
-            <DecksTab
-              userId={userId}
-              onNavigate={(t, did) => handleNavigate(t, did)}
-            />
-          )}
-          {activeTab === "study" && (
-            <StudyTab
-              userId={userId}
-              initialMode={studyMode}
-              initialDeckId={initialDeckId}
-              onNavigate={handleStudyNavigate}
-            />
-          )}
-          {activeTab === "library" && <LibraryTab userId={userId} />}
-          {activeTab === "games" && <GamesTab userId={userId} />}
-          {activeTab === "progress" && <ProgressTab userId={userId} />}
-          {activeTab === "shadow" && <ShadowTab userId={userId} />}
-          {activeTab === "profile" && <ProfileTab userId={userId} />}
+          {/* Bọc riêng từng tab: một tab hỏng thì chỉ ô nội dung hiện lỗi,
+              thanh điều hướng vẫn còn để người dùng đi chỗ khác. Boundary
+              nằm trong <main key={activeTab}> nên tự quên lỗi khi đổi tab. */}
+          <ErrorBoundary ten={`Tab ${activeLabel}`}>
+            {activeTab === "home" && (
+              <HomeTab onNavigate={(t) => handleNavigate(t)} />
+            )}
+            {activeTab === "path" && <PathTab />}
+            {activeTab === "decks" && (
+              <DecksTab
+                userId={userId}
+                onNavigate={(t, did) => handleNavigate(t, did)}
+              />
+            )}
+            {activeTab === "study" && (
+              <StudyTab
+                userId={userId}
+                initialMode={studyMode}
+                initialDeckId={initialDeckId}
+                onNavigate={handleStudyNavigate}
+              />
+            )}
+            {activeTab === "library" && <LibraryTab userId={userId} />}
+            {activeTab === "games" && <GamesTab userId={userId} />}
+            {activeTab === "progress" && <ProgressTab userId={userId} />}
+            {activeTab === "shadow" && <ShadowTab userId={userId} />}
+            {activeTab === "profile" && <ProfileTab userId={userId} />}
+          </ErrorBoundary>
         </main>
       </div>
 
