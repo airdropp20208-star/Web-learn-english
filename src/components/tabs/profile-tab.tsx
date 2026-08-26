@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useSession } from "next-auth/react";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Flame,
@@ -21,6 +22,11 @@ interface ProfileTabProps {
 }
 
 export function ProfileTab({ userId }: ProfileTabProps) {
+  // Trước đây chỗ này in cứng "Local User" cho mọi người, kể cả người đã
+  // đăng nhập — nhìn như tài khoản không được nhận ra.
+  const { data: session } = useSession();
+  const tenHienThi = session?.user?.name || session?.user?.email || "Khách";
+
   const [loading, setLoading] = useState(true);
   const state = useGamification();
   const [vocabCount, setVocabCount] = useState(0);
@@ -61,7 +67,7 @@ export function ProfileTab({ userId }: ProfileTabProps) {
             L{state.level}
           </div>
           <div className="flex-1">
-            <h2 className="text-xl font-bold">Local User</h2>
+            <h2 className="text-xl font-bold">{tenHienThi}</h2>
             <p className="text-primary-foreground/80 text-sm">
               Level {state.level} · {state.xp.toLocaleString()} XP
             </p>

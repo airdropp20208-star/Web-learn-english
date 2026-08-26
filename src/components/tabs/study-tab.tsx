@@ -30,9 +30,9 @@ const MODES: Array<{
   desc: string;
 }> = [
   { id: "flashcard", label: "Flashcard", icon: BookOpen, desc: "Học từ mới" },
-  { id: "review", label: "Ôn tập", icon: Brain, desc: "FSRS spaced repetition" },
-  { id: "quiz", label: "Quiz", icon: ListChecks, desc: "Trắc nghiệm + cloze" },
-  { id: "read", label: "Đọc", icon: FileText, desc: "Paste text + analyze" },
+  { id: "review", label: "Ôn tập", icon: Brain, desc: "Ôn tập ngắt quãng FSRS" },
+  { id: "quiz", label: "Quiz", icon: ListChecks, desc: "Trắc nghiệm và điền từ" },
+  { id: "read", label: "Đọc", icon: FileText, desc: "Dán văn bản, phân tích" },
   { id: "vocab", label: "Từ vựng", icon: NotebookPen, desc: "Sổ từ của bạn" },
 ];
 

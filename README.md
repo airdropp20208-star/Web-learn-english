@@ -14,7 +14,7 @@ duyệt. Đăng nhập thì tiến độ lên server và đồng bộ giữa cá
 | **Lộ trình** | Đường đi A1 → C2, mở khoá theo độ thành thạo từng bậc |
 | **Bộ từ** | Đăng ký và theo dõi 4 bộ từ vựng (10.114 từ, xem [NOTICE.md](NOTICE.md)) |
 | **Học** | Flashcard, ôn tập theo FSRS, quiz sinh bằng AI, và đọc — phân tích văn bản bất kỳ |
-| **Game** | 5 trò ôn từ: lật thẻ, quiz tốc độ, đúng/sai, đảo chữ, đối kháng |
+| **Game** | 7 trò ôn từ: đấu trùm từ vựng, tốc chiến 60 giây, nối từ, lật thẻ trí nhớ, xếp chữ, đúng hay sai, nghe viết chính tả |
 | **Thư viện** | 30 bài đọc theo trình độ, có gợi ý bài hợp trình độ hiện tại |
 | **Tiến độ** | Độ thành thạo từng bậc CEFR, điều kiện lên hạng, lịch sử ôn |
 | **Luyện nói** | Máy đọc mẫu bằng TTS, bạn nhại lại, ghi âm để nghe đối chiếu |
@@ -123,7 +123,7 @@ src/
 │       └── auth/[...nextauth]/     # Auth.js
 ├── components/
 │   ├── tabs/                       # 14 tab và tab con
-│   ├── games/                      # 5 trò chơi
+│   ├── games/                      # 5 trò tách file (2 trò còn lại nằm trong games-tab)
 │   ├── ui/                         # shadcn/ui
 │   ├── grammar-check.tsx           # Nút kiểm tra ngữ pháp + danh sách lỗi
 │   ├── user-menu.tsx               # Menu tài khoản trên header
@@ -138,7 +138,7 @@ src/
 │   ├── mastery-gate.ts             # Điều kiện lên hạng CEFR
 │   ├── session-builder.ts          # Chọn thẻ tới hạn và xen kẽ
 │   ├── content-curation.ts         # Chấm điểm từ đáng học, gợi ý bài đọc
-│   ├── game-engine.ts              # Logic chung của 5 trò chơi
+│   ├── game-engine.ts              # Logic chung của 7 trò chơi
 │   ├── gamification.ts             # Điểm, chuỗi ngày, huy hiệu
 │   ├── ai-client.ts                # Gọi Gemini, xoay vòng khoá
 │   ├── api-guard.ts                # Kiểm tra đầu vào zod + rate limit

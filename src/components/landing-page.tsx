@@ -12,6 +12,8 @@ import {
   TrendingUp,
   Library,
   Layers,
+  Mic,
+  RefreshCw,
   Check,
   ArrowRight,
 } from "lucide-react";
@@ -23,8 +25,8 @@ interface LandingPageProps {
 const STATS = [
   { value: "10,000+", label: "từ vựng" },
   { value: "4", label: "bộ từ sẵn" },
-  { value: "30", label: "bài đọc graded" },
-  { value: "Free", label: "miễn phí" },
+  { value: "30", label: "bài đọc theo trình độ" },
+  { value: "0đ", label: "trọn bộ tính năng" },
 ];
 
 const FEATURES = [
@@ -36,64 +38,78 @@ const FEATURES = [
   {
     icon: BookOpen,
     title: "Flashcard thông minh",
-    desc: "Học từ mới với IPA, audio, định nghĩa, ví dụ. Click để flip card, audio phát chuẩn bản xứ.",
+    desc: "Học từ mới kèm IPA, phát âm, định nghĩa và ví dụ. Chạm để lật thẻ, nghe giọng bản xứ.",
   },
   {
     icon: Brain,
-    title: "FSRS Spaced Repetition",
-    desc: "Thuật toán FSRS state-of-the-art (cùng chuẩn Anki mới) — ôn đúng lúc bạn sắp quên, không dư không thiếu.",
+    title: "Ôn tập ngắt quãng FSRS",
+    desc: "Thuật toán FSRS mới nhất, cùng chuẩn với Anki 2024 — nhắc ôn đúng lúc bạn sắp quên, không dư không thiếu.",
   },
   {
     icon: Gamepad2,
-    title: "Mini-Games",
-    desc: "Match Words và Spelling Bee — học qua game, không buồn ngủ.",
+    title: "Bảy trò ôn từ",
+    desc: "Đấu trùm từ vựng, tốc chiến 60 giây, nối từ, lật thẻ trí nhớ, xếp chữ, đúng hay sai, nghe viết chính tả.",
   },
   {
     icon: Library,
-    title: "Graded Reading Library",
-    desc: "30 bài đọc sẵn A1-C2 từ daily life đến philosophy. 1-click import + auto-extract vocabulary.",
+    title: "Thư viện bài đọc theo trình độ",
+    desc: "30 bài sẵn từ A1 đến C2, từ chuyện thường ngày tới triết học. Nhập một chạm, tự tách từ vựng ra sổ.",
   },
   {
     icon: Volume2,
-    title: "Dictionary + IPA + Audio",
-    desc: "Free Dictionary API + CMU pronouncing dict — phát âm chuẩn, IPA đầy đủ, không cần Gemini.",
+    title: "Từ điển, IPA và phát âm",
+    desc: "Free Dictionary API cùng bộ phiên âm CMU — nghe phát âm chuẩn, IPA đầy đủ, không cần tới AI.",
+  },
+  {
+    icon: Mic,
+    title: "Luyện nói shadowing",
+    desc: "Nghe câu mẫu, nhại lại, tự ghi âm rồi nghe lại để so. Luyện phát âm mà không phải đoán mò xem mình nói có giống không.",
   },
   {
     icon: TrendingUp,
-    title: "Progress Tracking",
-    desc: "Tier CEFR (A1→C2), mastery %, streak, per-level breakdown. Biết mình đang ở đâu.",
+    title: "Theo dõi tiến độ",
+    desc: "Bậc CEFR từ A1 tới C2, mức thành thạo, chuỗi ngày học, thống kê theo từng bậc. Biết mình đang ở đâu.",
   },
   {
     icon: Sparkles,
-    title: "AI-Powered Analysis",
-    desc: "Paste bất kỳ văn bản nào — Gemini extract từ vựng + summarize. LanguageTool check grammar free.",
+    title: "Phân tích bằng AI",
+    desc: "Dán bất kỳ văn bản nào — Gemini tách từ vựng và tóm tắt. LanguageTool kiểm tra ngữ pháp, miễn phí.",
+  },
+  {
+    icon: RefreshCw,
+    title: "Tài khoản và đồng bộ",
+    desc: "Học trên máy tính, ôn tiếp trên điện thoại. Đăng nhập rồi thì tiến độ đi theo bạn, không mất khi xoá trình duyệt.",
   },
 ];
 
 const FAQS = [
   {
     q: "App này miễn phí không?",
-    a: "Hoàn toàn miễn phí. Không cần đăng ký, không cần email, không giới hạn số từ học. Data lưu trong browser của bạn.",
+    a: "Hoàn toàn miễn phí, không giới hạn số từ học. Dùng ngay được mà không cần đăng ký; muốn giữ tiến độ trên nhiều thiết bị thì tạo tài khoản, cũng miễn phí.",
   },
   {
     q: "App hỗ trợ những mục tiêu học nào?",
-    a: "TOEIC (600 từ thiết yếu), Oxford 5000 (từ vựng chung), 4000 Essential Words (foundation), Giao tiếp hằng ngày (Shopping, Travel, Eating Out...). Tự tạo deck riêng cũng được.",
+    a: "TOEIC (600 từ thiết yếu), Oxford 5000 (từ vựng phổ thông), 4000 Essential Words (nền tảng), Giao tiếp hằng ngày (mua sắm, du lịch, ăn uống…). Tự tạo bộ từ riêng cũng được.",
   },
   {
-    q: "Spaced Repetition hoạt động thế nào?",
+    q: "Ôn tập ngắt quãng hoạt động thế nào?",
     a: "App dùng FSRS (Free Spaced Repetition Scheduler) — thuật toán mới nhất, cùng chuẩn với Anki 2024. Hệ thống đánh dấu từ cần ôn và đưa về đúng lúc bạn dễ quên nhất.",
   },
   {
     q: "Tôi có thể học trên điện thoại không?",
-    a: "Có. Toàn bộ UI responsive, dùng tốt trên mobile, tablet, laptop. Không cần cài app — mở browser là dùng được.",
+    a: "Có. Toàn bộ giao diện co giãn theo màn hình, chạy tốt trên điện thoại, máy tính bảng và laptop. Không cần cài gì — mở trình duyệt là học được.",
   },
   {
     q: "Khác biệt so với app khác là gì?",
-    a: "Tất cả trong 1 chỗ: bộ từ sẵn + flashcard + game + SRS + reading library + grammar check + dictionary. Không cần nhảy qua lại nhiều app. Lại còn miễn phí.",
+    a: "Tất cả trong một chỗ: bộ từ sẵn, flashcard, game, ôn tập ngắt quãng, thư viện bài đọc, kiểm tra ngữ pháp, từ điển và luyện nói. Không phải nhảy qua lại nhiều app. Lại còn miễn phí.",
   },
   {
-    q: "Data của tôi có an toàn không?",
-    a: "Data lưu trong localStorage của browser bạn — không gửi đi đâu cả. Xóa browser data = xóa toàn bộ progress. Không có server thu thập.",
+    q: "Dữ liệu của tôi nằm ở đâu?",
+    a: "Chưa đăng nhập thì mọi thứ nằm trong trình duyệt của bạn, không gửi đi đâu — đổi lại, xoá dữ liệu trình duyệt là mất sạch tiến độ. Đăng nhập thì tiến độ được lưu trên máy chủ của app để đồng bộ giữa các thiết bị, và không chia sẻ cho bên thứ ba nào.",
+  },
+  {
+    q: "Có chế độ tối không?",
+    a: "Có. Mở menu tài khoản ở góc trên rồi chọn Sáng, Tối hoặc Theo hệ thống.",
   },
 ];
 
@@ -115,7 +131,8 @@ export function LandingPage({ onStart }: LandingPageProps) {
           </h1>
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto mb-8">
             Thay vì mở 5 app khác nhau, bạn chỉ cần một chỗ: chọn bộ từ, học flashcard,
-            luyện qua game, để SRS nhắc ôn đúng lúc. 10,000+ từ vựng từ TOEIC, Oxford, IELTS.
+            luyện qua game, để hệ thống nhắc ôn đúng lúc. Hơn 10.000 từ từ TOEIC, Oxford và
+            4000 Essential Words.
           </p>
           <div className="flex gap-3 justify-center flex-wrap">
             <Button size="lg" onClick={onStart} className="gap-2">
@@ -141,7 +158,7 @@ export function LandingPage({ onStart }: LandingPageProps) {
         <div className="text-center mb-12">
           <h2 className="text-3xl font-bold mb-3">Mọi thứ bạn cần để học từ vựng</h2>
           <p className="text-muted-foreground">
-            8 tính năng cốt lõi, không cần app khác.
+            9 tính năng cốt lõi, không cần app khác.
           </p>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -170,10 +187,10 @@ export function LandingPage({ onStart }: LandingPageProps) {
           <h2 className="text-3xl font-bold text-center mb-12">Cách học trong 4 bước</h2>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
             {[
-              { num: "1", title: "Chọn bộ từ", desc: "Subscribe TOEIC, Oxford, Essential, hoặc Daily" },
-              { num: "2", title: "Học Flashcard", desc: "Flip card, nghe audio, xem IPA + definition" },
-              { num: "3", title: "Luyện qua Game", desc: "Match words + Spelling Bee để nhớ sâu" },
-              { num: "4", title: "Ôn theo SRS", desc: "FSRS nhắc ôn đúng lúc — không quên, không dư" },
+              { num: "1", title: "Chọn bộ từ", desc: "Thêm bộ TOEIC, Oxford, Essential hoặc Giao tiếp" },
+              { num: "2", title: "Học flashcard", desc: "Lật thẻ, nghe phát âm, xem IPA và nghĩa" },
+              { num: "3", title: "Luyện qua game", desc: "Nối từ, xếp chữ, đúng hay sai — nhớ sâu hơn học chay" },
+              { num: "4", title: "Ôn lại đúng lúc", desc: "FSRS nhắc đúng hôm bạn sắp quên, không dư không thiếu" },
             ].map((step) => (
               <div key={step.num} className="text-center">
                 <div className="w-12 h-12 rounded-full bg-primary text-primary-foreground font-bold text-lg mx-auto mb-3 flex items-center justify-center">
@@ -210,7 +227,8 @@ export function LandingPage({ onStart }: LandingPageProps) {
         <div className="max-w-3xl mx-auto px-4 py-16 text-center">
           <h2 className="text-3xl font-bold mb-3">Bắt đầu miễn phí, không cần cài app</h2>
           <p className="text-primary-foreground/80 mb-8">
-            Mở browser là học được. Không đăng ký, không email, không giới hạn.
+            Mở trình duyệt là học được. Muốn đồng bộ nhiều thiết bị thì đăng nhập, còn
+            không thì cứ học thẳng.
           </p>
           <Button
             size="lg"
@@ -228,10 +246,10 @@ export function LandingPage({ onStart }: LandingPageProps) {
       <footer className="border-t py-8 text-center text-sm text-muted-foreground">
         <div className="max-w-5xl mx-auto px-4">
           <p>
-            Built with Next.js 16 · FSRS · Gemini 2.5 Flash · Free Dictionary API
+            Dựng bằng Next.js 16 · FSRS · Gemini 2.5 Flash · Free Dictionary API
           </p>
           <p className="mt-1 text-xs">
-            Data sources: TOEIC 600 (tflat.vn) · Oxford 5000 (OUP) · 4000 Essential Words (Compass) · CEFR-J
+            Nguồn dữ liệu: TOEIC 600 (tflat.vn) · Oxford 5000 (OUP) · 4000 Essential Words (Compass) · CEFR-J
           </p>
         </div>
       </footer>

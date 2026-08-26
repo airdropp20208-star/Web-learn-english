@@ -120,7 +120,7 @@ export function ProgressTab({ userId }: ProgressTabProps) {
           <CardContent className="p-4 flex items-center gap-3">
             <Trophy className="w-8 h-8 text-amber-500" />
             <div>
-              <div className="text-xs text-muted-foreground">Current tier</div>
+              <div className="text-xs text-muted-foreground">Bậc hiện tại</div>
               <Badge className={CEFR_COLOR[progress.currentTier]} variant="outline">
                 <span className="text-base font-bold">{progress.currentTier}</span>
               </Badge>
@@ -164,7 +164,7 @@ export function ProgressTab({ userId }: ProgressTabProps) {
         <CardContent className="space-y-3">
           <div className="grid grid-cols-2 gap-3 text-sm">
             <div>
-              <div className="text-xs text-muted-foreground">Items in tier</div>
+              <div className="text-xs text-muted-foreground">Số từ trong bậc</div>
               <div className="font-medium">
                 {tierCheck?.sampleSize ?? 0} / 10
               </div>
@@ -210,9 +210,9 @@ export function ProgressTab({ userId }: ProgressTabProps) {
       {/* Per-tier breakdown */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Mastery by tier</CardTitle>
+          <CardTitle className="text-base">Mức thành thạo theo bậc</CardTitle>
           <CardDescription>
-            Vocabulary items saved and average recall per CEFR level.
+            Số từ đã lưu và khả năng nhớ trung bình ở từng bậc CEFR.
           </CardDescription>
         </CardHeader>
         <CardContent>

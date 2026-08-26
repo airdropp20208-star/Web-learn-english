@@ -5,18 +5,20 @@ import { Toaster as SonnerToaster } from "@/components/ui/sonner";
 import { Providers } from "@/components/providers";
 
 export const metadata: Metadata = {
-  title: "Learn English — Reading + Shadowing",
+  title: "Learn English — Đọc hiểu và luyện nói",
   description:
-    "Read real texts, learn vocabulary in context, master with spaced repetition, and shadow speaking with TTS.",
+    "Đọc văn bản thật, học từ vựng theo ngữ cảnh, ghi nhớ bằng ôn tập ngắt quãng FSRS và luyện nói theo kiểu shadowing.",
   keywords: [
-    "English learning",
-    "reading comprehension",
-    "shadowing",
-    "spaced repetition",
+    "học tiếng Anh",
+    "luyện đọc hiểu",
+    "luyện nói shadowing",
+    "ôn tập ngắt quãng",
+    "FSRS",
     "CEFR",
-    "vocabulary",
+    "từ vựng tiếng Anh",
+    "English learning",
   ],
-  authors: [{ name: "Learn English App" }],
+  authors: [{ name: "Learn English" }],
 };
 
 export default function RootLayout({
@@ -25,7 +27,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    // Giao diện là tiếng Việt. Để lang="en" thì trình đọc màn hình phát âm
+    // toàn bộ nội dung bằng giọng Anh, nghe không ra chữ gì.
+    <html lang="vi" suppressHydrationWarning>
       <body className="antialiased bg-background text-foreground">
         <Providers>
           {children}

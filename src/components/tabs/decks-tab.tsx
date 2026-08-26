@@ -60,7 +60,7 @@ export function DecksTab({ userId, onNavigate }: DecksTabProps) {
         }
         if (!cancelled) setProgress(progMap);
       } catch (err) {
-        toast.error("Failed to load decks");
+        toast.error("Không tải được danh sách bộ từ");
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -79,11 +79,11 @@ export function DecksTab({ userId, onNavigate }: DecksTabProps) {
         next.delete(deckId);
         return next;
       });
-      toast.success("Unsubscribed from deck");
+      toast.success("Đã bỏ theo dõi bộ từ");
     } else {
       await subscribeToDeck(deckId);
       setSubscribed((prev) => new Set(prev).add(deckId));
-      toast.success("Subscribed! Start studying in Flashcard tab.");
+      toast.success("Đã thêm! Vào tab Flashcard để bắt đầu học.");
     }
   }
 
@@ -104,9 +104,9 @@ export function DecksTab({ userId, onNavigate }: DecksTabProps) {
           <div className="flex items-center gap-3">
             <Library className="w-5 h-5 text-primary" />
             <div>
-              <h3 className="font-semibold">Vocabulary Decks</h3>
+              <h3 className="font-semibold">Bộ từ vựng</h3>
               <p className="text-sm text-muted-foreground">
-                {decks.length} decks available · {decks.reduce((s, d) => s + d.wordCount, 0).toLocaleString()} words total
+                {decks.length} bộ · tổng {decks.reduce((s, d) => s + d.wordCount, 0).toLocaleString()} từ
               </p>
             </div>
           </div>

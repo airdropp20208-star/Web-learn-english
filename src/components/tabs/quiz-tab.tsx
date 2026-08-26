@@ -83,7 +83,7 @@ export function QuizTab({ userId }: QuizTabProps) {
 
   async function handleGenerate() {
     if (!selectedText) {
-      toast.error("Pick a text first");
+      toast.error("Chọn một bài đọc trước đã");
       return;
     }
     setGenerating(true);
@@ -238,17 +238,17 @@ export function QuizTab({ userId }: QuizTabProps) {
     <div className="space-y-4">
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Generate quiz</CardTitle>
+          <CardTitle className="text-base">Tạo bộ câu hỏi</CardTitle>
           <CardDescription>
-            Pick a saved text. AI will create a mix of mcq, cloze, and recall questions.
+            Chọn một bài đã lưu. AI sẽ trộn ba dạng: chọn nghĩa, điền từ và nhớ lại.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="space-y-2">
-            <Label htmlFor="text-select">Text</Label>
+            <Label htmlFor="text-select">Bài đọc</Label>
             <Select value={selectedTextId} onValueChange={setSelectedTextId}>
               <SelectTrigger id="text-select">
-                <SelectValue placeholder="Pick a text" />
+                <SelectValue placeholder="Chọn bài đọc" />
               </SelectTrigger>
               <SelectContent>
                 {texts.map((t) => (
@@ -364,14 +364,14 @@ export function QuizTab({ userId }: QuizTabProps) {
                       value={userAns}
                       onChange={(e) => handleAnswer(idx, e.target.value)}
                       disabled={submitted}
-                      placeholder="Type the missing word…"
+                      placeholder="Điền từ còn thiếu…"
                     />
                   ) : (
                     <Textarea
                       value={userAns}
                       onChange={(e) => handleAnswer(idx, e.target.value)}
                       disabled={submitted}
-                      placeholder="Type your answer…"
+                      placeholder="Nhập câu trả lời…"
                       className="min-h-[60px]"
                     />
                   )}

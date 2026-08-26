@@ -138,7 +138,7 @@ export function VocabTab({ userId }: VocabTabProps) {
       <Card>
         <CardContent className="p-6 text-center space-y-3">
           <NotebookPen className="w-10 h-10 mx-auto text-muted-foreground" />
-          <p className="text-muted-foreground">Your vocabulary notebook is empty.</p>
+          <p className="text-muted-foreground">Sổ từ của bạn chưa có gì.</p>
           <p className="text-xs text-muted-foreground">
             Read a text and click highlighted words to save them here.
           </p>
@@ -155,7 +155,7 @@ export function VocabTab({ userId }: VocabTabProps) {
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search words or definitions…"
+            placeholder="Tìm từ hoặc nghĩa…"
             className="border-0 focus-visible:ring-0"
           />
           <Badge variant="outline">{sorted.length} words</Badge>
