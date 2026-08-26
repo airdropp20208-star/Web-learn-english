@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Đẩy liên tiếp mấy commit thì chỉ giữ lượt chạy cuối — mấy lượt trước đằng nào
+# cũng kiểm tra một cây mã không còn tồn tại.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  kiem-tra:
+    name: Typecheck · Lint · Test · Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Vercel đang chạy Node 22; CI phải khớp, không thì lỗi chỉ lộ ra
+          # sau khi deploy.
+          node-version: 22
+          cache: npm
+
+      - name: Cài dependency
+        run: npm ci
+
+      # `postinstall` đã chạy lệnh này, nhưng npm bỏ qua script đó khi cache
+      # được khôi phục. Không có Prisma Client thì typecheck đỏ ngay dòng
+      # import đầu tiên, nên gọi lại cho chắc — lệnh này idempotent.
+      - name: Sinh Prisma Client
+        run: npx prisma generate
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit test
+        run: npm run test
+
+      - name: Build
+        run: npm run build
+
+# Hai bộ test dưới đây cố ý KHÔNG chạy ở đây:
+#
+# - `npm run test:integration` cần một Postgres thật (`scripts/pglite-server.mjs`
+#   dựng một cái trên cổng 5433). Chạy được trên CI, nhưng thêm khoảng một phút
+#   vào mọi lượt push và hỏng theo kiểu khó đọc khi cổng bị chiếm. Sẽ thêm khi
+#   có job riêng chạy theo lịch, không chặn merge.
+#
+# - `npx playwright test` cần tải trình duyệt (~300 MB) và dựng server. Cùng lý
+#   do: chậm và giòn hơn giá trị nó mang lại ở bước gác cổng này.
+#
+# Job trên không cần biến môi trường nào. Đó là chủ ý: thiếu DATABASE_URL thì
+# app vào chế độ khách, thiếu GEMINI_API_KEYS thì các tính năng AI báo "chưa
+# cấu hình" — cả hai đều là đường đi hợp lệ và build phải xanh trên chúng.
