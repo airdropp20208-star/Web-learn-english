@@ -4,7 +4,6 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
 import type { AnalyzeResponse, QuizResponse, CEFRLevel } from "./types";
-import { scoreText } from "./readability";
 
 // ============ Key management ============
 
@@ -149,117 +148,6 @@ async function callGemini(opts: CallOptions): Promise<string> {
     "MAX_RETRIES",
     503
   );
-}
-
-// ============ Public: analyze text ============
-
-const ANALYZE_SCHEMA = {
-  type: Type.OBJECT,
-  properties: {
-    title: { type: Type.STRING, description: "Short title (max 80 chars) summarizing the text" },
-    cefrLevel: {
-      type: Type.STRING,
-      enum: ["A1", "A2", "B1", "B2", "C1", "C2"],
-      description: "Estimated CEFR difficulty level",
-    },
-    summary: { type: Type.STRING, description: "1-2 sentence summary of the text" },
-    highlightedWords: {
-      type: Type.ARRAY,
-      description: "3-8 vocabulary words worth learning from this text",
-      items: {
-        type: Type.OBJECT,
-        properties: {
-          word: { type: Type.STRING },
-          definition: { type: Type.STRING, description: "Concise definition matching how the word is used in context" },
-          example: { type: Type.STRING, description: "A different example sentence using the word" },
-          cefrLevel: {
-            type: Type.STRING,
-            enum: ["A1", "A2", "B1", "B2", "C1", "C2"],
-          },
-        },
-        required: ["word", "definition", "example", "cefrLevel"],
-      },
-    },
-  },
-  required: ["title", "cefrLevel", "summary", "highlightedWords"],
-};
-
-/**
- * Phân tích một đoạn văn bằng Gemini trong MỘT lần gọi.
- *
- * LƯU Ý: hiện KHÔNG nơi nào gọi hàm này. Luồng đang chạy trong app là
- * `generateSummary` (chỉ hỏi Gemini tiêu đề/tóm tắt/CEFR) rồi lấy nghĩa, IPA,
- * audio từ dịch vụ từ điển và bộ dữ liệu CEFR tĩnh — rẻ hơn nhiều. Giữ hàm này
- * lại làm phương án dự phòng khi từ điển chết; nếu tới Phase 5 vẫn không ai
- * dùng thì nên xoá hẳn thay vì để hai luồng phân tích song song.
- *
- * Gemini không trả IPA hay audio, nên hai trường đó luôn `null` ở đây — người
- * gọi phải tự bù từ dịch vụ từ điển nếu cần.
- */
-export async function analyzeText(content: string): Promise<AnalyzeResponse> {
-  const prompt = `Analyze the following English text for a language learner.\n\nText:\n"""\n${content}\n"""\n\nExtract 3-8 vocabulary words that are worth learning (skip trivial words like "the", "and"). For each word, provide a definition matching its usage in context, a different example sentence, and its CEFR level. Also estimate the overall CEFR level of the text and provide a short title and summary.`;
-
-  const raw = await callGemini({
-    prompt,
-    systemInstruction:
-      "You are an English language teacher. You help learners by extracting vocabulary from texts and providing clear, accurate definitions. Always respond in valid JSON matching the requested schema.",
-    responseMimeType: "application/json",
-    responseSchema: ANALYZE_SCHEMA,
-  });
-
-  const parsed = JSON.parse(raw) as {
-    title: string;
-    cefrLevel: CEFRLevel;
-    summary: string;
-    highlightedWords: Array<{
-      word: string;
-      definition: string;
-      example: string;
-      cefrLevel: CEFRLevel;
-    }>;
-  };
-
-  // Build full response with position + contextSentence
-  const highlightedWords = parsed.highlightedWords.map((w) => {
-    const lowerContent = content.toLowerCase();
-    const lowerWord = w.word.toLowerCase();
-    const position = lowerContent.indexOf(lowerWord);
-    const safePosition = position === -1 ? 0 : position;
-
-    // Find context sentence
-    const sentences = content.split(/(?<=[.!?])\s+/);
-    const contextSentence =
-      sentences.find((s) => s.toLowerCase().includes(lowerWord)) ?? sentences[0] ?? "";
-
-    return {
-      word: w.word,
-      lemma: w.word.toLowerCase(),
-      position: safePosition,
-      cefrLevel: w.cefrLevel,
-      definition: w.definition,
-      example: w.example,
-      contextSentence,
-      ipa: null,
-      audioUrl: null,
-    };
-  });
-
-  const score = scoreText(content);
-
-  return {
-    title: parsed.title,
-    cefrLevel: parsed.cefrLevel,
-    summary: parsed.summary,
-    highlightedWords,
-    readability: score
-      ? {
-          fleschKincaid: score.fleschKincaid,
-          fleschReading: score.fleschReading,
-          cefrEstimate: score.cefrEstimate,
-          wordCount: score.wordCount,
-        }
-      : null,
-  };
 }
 
 // ============ Public: generate summary (title + summary + CEFR) ============

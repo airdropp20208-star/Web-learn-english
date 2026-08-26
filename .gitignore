@@ -79,3 +79,6 @@ scripts/.gh_token_tmp
 # Playwright
 test-results/
 playwright-report/
+
+# Rác của công cụ, không phải nguồn dự án
+tool-results/
